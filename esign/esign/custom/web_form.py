@@ -738,7 +738,7 @@ def attach_print_to_document(
 
 @frappe.whitelist()
 def get_esign_link(
-	doc: Document, web_form_name: str, print_format_name: str = "", recipient_email: str = ""
+	doc: Document | str | dict, web_form_name: str, print_format_name: str = "", recipient_email: str = ""
 ) -> str:
 	"""Get the eSign Web Form link for a given document and web form name.
 
@@ -774,9 +774,9 @@ def get_esign_link(
 		# Generate the URL
 		from frappe.utils import get_url
 
-		base_url = get_url()
+		base_url = get_url().rstrip("/")
 		share_key = doc.get_document_share_key()
-		web_form_path = f"{web_form.route}/{doc.name}/edit"
+		web_form_path = f"/{(web_form.route or '').lstrip('/')}/{doc.name}/edit"
 		query_string = f"?key={share_key}"
 		if print_format_name:
 			query_string += f"&format={print_format_name}"
