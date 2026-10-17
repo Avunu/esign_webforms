@@ -227,6 +227,16 @@ class TestSigningPage(EsignTestCase):
 		content = self.render()
 		self.assertNotIn("esign-layout", content)
 
+	def test_owner_without_key_gets_the_signing_page(self):
+		# A portal user opening their own record from the web form list, as accept allows.
+		self.doc.db_set("owner", OUTSIDER)
+		frappe.set_user(OUTSIDER)
+		self.assertIn("esign-layout", self.render())
+
+	def test_user_without_key_or_permission_is_refused(self):
+		frappe.set_user(OUTSIDER)
+		self.assertNotIn("esign-layout", self.render())
+
 	def test_completed_document_links_the_signed_pdf(self):
 		self.doc.db_set("signature", SIGNATURE)
 		frappe.get_doc(
@@ -342,6 +352,17 @@ class TestDownloadSignedPdf(EsignTestCase):
 		frappe.set_user("Guest")
 		with signing_request(method="GET"), self.assertRaises(frappe.PermissionError):
 			download_signed_pdf(TEST_DOCTYPE, self.doc.name)
+
+	def test_user_without_key_needs_print_permission(self):
+		self.attach_signed_pdf(is_private=0)
+		frappe.set_user(OUTSIDER)
+		with signing_request(method="GET"), self.assertRaises(frappe.PermissionError):
+			download_signed_pdf(TEST_DOCTYPE, self.doc.name)
+
+		frappe.set_user(SIGNER)
+		with signing_request(method="GET"):
+			download_signed_pdf(TEST_DOCTYPE, self.doc.name)
+		self.assertEqual(frappe.local.response["type"], "redirect")
 
 	def test_no_signed_pdf(self):
 		with signing_request(method="GET"), self.assertRaises(frappe.DoesNotExistError):
@@ -474,6 +495,20 @@ class TestAccept(EsignTestCase):
 		frappe.set_user(OUTSIDER)
 		with self.assertRaises(frappe.PermissionError):
 			self.accept(form_data(self.doc, signature=SIGNATURE))
+
+	def test_user_with_doctype_write_permission_updates_without_key(self):
+		# SIGNER is neither the owner nor holds a key, but their role may write the doctype.
+		frappe.set_user(SIGNER)
+		self.accept(form_data(self.doc, signature=SIGNATURE))
+		self.doc.reload()
+		self.assertEqual(self.doc.signature, SIGNATURE)
+
+	def test_owner_updates_without_key(self):
+		self.doc.db_set("owner", OUTSIDER)
+		frappe.set_user(OUTSIDER)
+		self.accept(form_data(self.doc, signature=SIGNATURE))
+		self.doc.reload()
+		self.assertEqual(self.doc.signature, SIGNATURE)
 
 	def test_anonymous_form_saves_as_guest_and_restores_the_user(self):
 		self.web_form.db_set("anonymous", 1)

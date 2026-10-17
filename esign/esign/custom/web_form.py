@@ -235,8 +235,11 @@ class EsignWebForm(BaseWebForm):
 
 		# Validate access via share key or fallback to standard permissions. The document is
 		# only marked permission-free afterwards: frappe's website permission check (part of
-		# the fallback) passes any document that already carries ignore_permissions.
-		validate_esign_key(key, doc)
+		# the fallback) passes any document that already carries ignore_permissions. Without a
+		# key, the web form's own rules (owner, website permission, document permissions) also
+		# let a user in, as in frappe's web form and in accept.
+		if key or not BaseWebForm.has_web_form_permission(self, self.doc_type, cur_doc_name, "read"):
+			validate_esign_key(key, doc)
 		doc.flags.ignore_permissions = True
 
 		# Allow public access to the web form if validation passes
@@ -1160,9 +1163,15 @@ def accept(web_form, data):
 		except frappe.PermissionError, frappe.exceptions.LinkExpired:
 			frappe.throw(_("Invalid or expired access key"), frappe.PermissionError)
 
-	# An update needs the document's share key or web form write permission, as in frappe's
-	# own accept; otherwise anyone who knows a document name could overwrite its form fields.
-	if data.name and not wf.has_web_form_permission(doctype, data.name, "write"):
+	# An update needs the document's share key, web form write permission or DocType write
+	# permission: the three ways frappe's own accept lets an update through (the last one by
+	# saving with permission checks on). Otherwise anyone who knows a document name could
+	# overwrite its form fields.
+	if (
+		data.name
+		and not wf.has_web_form_permission(doctype, data.name, "write")
+		and not frappe.has_permission(doctype, "write", data.name)
+	):
 		frappe.throw(_("You are not permitted to update this document"), frappe.PermissionError)
 
 	# Now proceed with the form submission using ignore_permissions
