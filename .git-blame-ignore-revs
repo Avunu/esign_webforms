@@ -1,2 +1,3 @@
 # Mass reformats (style: PRs), one squash SHA per line with its subject as a comment.
 # GitHub reads this file; locally the dev shell sets blame.ignoreRevsFile.
+0f2bacb5c3f826e683a21223e4adf81ad0eba101  # style: adopt the app standards (managed config and formatting) (#7)
