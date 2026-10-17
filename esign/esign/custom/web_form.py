@@ -4,6 +4,8 @@
 import hashlib
 import json
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime
 from typing import TypedDict, cast
 
@@ -19,7 +21,7 @@ from frappe.model.document import Document
 from frappe.rate_limiter import rate_limit
 from frappe.twofactor import get_qr_svg_code
 from frappe.types import DF
-from frappe.utils import cint, get_frappe_version, now
+from frappe.utils import cint, escape_html, get_frappe_version, now
 from frappe.website.doctype.web_form.web_form import WebForm as BaseWebForm
 from frappe.www.printview import validate_print_permission
 
@@ -377,9 +379,9 @@ def _send_esign_notification(
 			)
 			return
 
-		# Build context similar to how Notification.send() does it
+		# Build context the way Notification.send() does
 		context = get_context(doc)
-		context = {"doc": doc, "alert": notification, "comments": None}
+		context.update({"alert": notification, "comments": None})
 		if doc.get("_comments"):
 			context["comments"] = json.loads(str(doc.get("_comments", "[]")))
 
@@ -394,12 +396,14 @@ def _send_esign_notification(
 			)
 			return
 
-		# Render subject and message
+		# Render subject and message. Both come from the Notification, which only System
+		# Managers author: the same trusted source frappe's own Notification.send_an_email
+		# renders them from, with the same sandboxed environment.
 		subject = notification.subject
 		if subject and "{" in subject:
-			subject = frappe.render_template(notification.subject, context)
+			subject = frappe.render_template(subject, context)  # nosemgrep: frappe-ssti
 
-		message = frappe.render_template(notification.message, context) or ""
+		message = frappe.render_template(notification.message, context) or ""  # nosemgrep: frappe-ssti
 
 		# Append audit trail information to the notification email
 		if audit_data:
@@ -420,9 +424,11 @@ def _send_esign_notification(
 				audit_rows.append((_("PDF SHA-256"), pdf_hash))
 
 			if audit_rows:
+				# The values come from the signer's request (user agent, email parameter), so
+				# they are escaped before going into the HTML body.
 				table_rows = "".join(
 					f'<tr><td style="padding:4px 8px;font-weight:bold;white-space:nowrap;vertical-align:top;">{label}</td>'
-					f'<td style="padding:4px 8px;word-break:break-all;">{value}</td></tr>'
+					f'<td style="padding:4px 8px;word-break:break-all;">{escape_html(value)}</td></tr>'
 					for label, value in audit_rows
 				)
 				message += (
@@ -513,21 +519,14 @@ def _send_esign_notification(
 		)
 
 
-def attach_print_to_document(
-	doc: Document,
-	print_format: str,
-	request_data: RequestData,
-	audit_data: AuditData,
-	notification_name: str | None = None,
-):
-	"""Background job to attach the signed PDF to the document.
+@contextmanager
+def _job_request(request_data: RequestData) -> Iterator[None]:
+	"""Give a background job the signing request's host, scheme and headers.
 
-	Also records audit trail and SHA-256 hash for document integrity verification.
-	Creates a Communication record for timeline display via additional_timeline_content hook.
-	Optionally triggers a notification with the validated signed PDF attached.
+	The PDF renderer and URL helpers read them from `frappe.local.request`. Only the
+	context-local request is set: assigning `frappe.request` would replace the module-level
+	LocalProxy for the rest of the worker process and leak into later jobs.
 	"""
-	from frappe import attach_print
-
 	mock_request = frappe._dict(
 		{
 			"headers": request_data.get("headers", {}),
@@ -538,72 +537,55 @@ def attach_print_to_document(
 			"scheme": request_data.get("scheme", "https"),
 		}
 	)
-
-	# Only set the context-local request. Assigning `frappe.request` would replace the
-	# module-level LocalProxy for the rest of this worker process and leak into later jobs.
 	prev_request = getattr(frappe.local, "request", _UNSET)
 	frappe.local.request = mock_request
-
 	try:
-		# Refetch the document to ensure latest data
-		doc.reload()
+		yield
+	finally:
+		if prev_request is _UNSET:
+			if hasattr(frappe.local, "request"):
+				del frappe.local.request
+		else:
+			frappe.local.request = prev_request
 
-		# Generate the PDF
-		timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-		print_data = attach_print(
-			doctype=doc.doctype,
-			name=doc.name,
-			file_name=f"{doc.name}_signed_{timestamp_str}",
-			print_format=print_format,
-			doc=doc,
-			print_letterhead=False,
-		)
 
-		# Compute SHA-256 hash of the PDF content
-		pdf_content = print_data["fcontent"]
-		pdf_hash = hashlib.sha256(pdf_content).hexdigest()
-		frappe_content_hash = get_content_hash(pdf_content)
+def _read_file_bytes(file_doc: File) -> bytes:
+	"""The stored bytes of a local File. File.get_content decodes anything that decodes as
+	text (a PDF often does, as windows-1252), and writing that back would change the bytes."""
+	with open(file_doc.get_full_path(), "rb") as f:
+		return f.read()
 
-		# Attach the signed PDF to the document
-		# Note: content_hash must be set explicitly for cloud_storage deduplication to work,
-		# as cloud_storage's validate() doesn't call the core File validate which generates it
-		file_doc = cast(
-			File,
-			frappe.get_doc(
-				{
-					"doctype": "File",
-					"file_name": print_data["fname"],
-					"attached_to_doctype": doc.doctype,
-					"attached_to_name": doc.name,
-					"folder": "Home/Attachments",
-					"is_private": True,
-					"content": pdf_content,
-					"content_hash": frappe_content_hash,
-				}
-			),
-		)
-		file_doc.insert(ignore_permissions=True)
 
-		# Check if this is a cloud_storage-enhanced File (has s3_key and file_association attributes)
-		is_cloud_storage = hasattr(file_doc, "s3_key") and hasattr(file_doc, "file_association")
+def _is_cloud_storage_file(file_doc: File) -> bool:
+	"""Whether cloud_storage's File extension (s3_key, file_association) is installed."""
+	return hasattr(file_doc, "s3_key") and hasattr(file_doc, "file_association")
 
-		if is_cloud_storage:
-			# Extract s3_key from the file_url and persist it
-			s3_key = str(file_doc.file_url or "").replace("/api/method/retrieve?key=", "")
-			if s3_key:
-				file_doc.db_set("s3_key", s3_key)
 
-		# Commit the file transaction to avoid deadlock with Communication's _comments update.
-		# Cloud storage's associate_files() may have modified the parent document, and the
-		# Communication insert will try to update _comments on the same document.
-		frappe.db.commit()
+def record_signature(
+	doctype: str,
+	name: str,
+	file_name: str,
+	pdf_hash: str,
+	request_data: RequestData,
+	audit_data: AuditData,
+	notification_name: str | None = None,
+):
+	"""Background job: record the signing on the document's timeline.
+
+	Creates the eSign Communication (audit data as JSON, shown through the
+	additional_timeline_content hook), links the signed PDF to it and, when the web form
+	names one, sends the notification with that PDF attached.
+	"""
+	with _job_request(request_data):
+		doc = frappe.get_doc(doctype, name)
+		file_doc = cast(File, frappe.get_doc("File", file_name))
 
 		# Create Communication record for timeline display with audit data as JSON
 		audit_content = json.dumps(
 			{
 				**audit_data,
 				"pdf_hash": pdf_hash,
-				"file_name": print_data["fname"],
+				"file_name": file_doc.file_name,
 			}
 		)
 
@@ -624,11 +606,10 @@ def attach_print_to_document(
 		comm.insert(ignore_permissions=True)
 
 		# Associate the PDF with the Communication
-		if is_cloud_storage:
+		if _is_cloud_storage_file(file_doc):
 			# For cloud_storage, add a file_association instead of duplicating the file
 			from frappe.utils import get_datetime
 
-			file_doc.reload()
 			file_doc.append(
 				"file_association",
 				{
@@ -646,13 +627,13 @@ def attach_print_to_document(
 				frappe.get_doc(
 					{
 						"doctype": "File",
-						"file_name": print_data["fname"],
+						"file_name": file_doc.file_name,
 						"attached_to_doctype": "Communication",
 						"attached_to_name": comm.name,
 						"folder": "Home/Attachments",
 						"is_private": True,
-						"content": pdf_content,
-						"content_hash": frappe_content_hash,
+						"content": _read_file_bytes(file_doc),
+						"content_hash": file_doc.content_hash,
 					}
 				),
 			)
@@ -661,12 +642,83 @@ def attach_print_to_document(
 		# Trigger notification with the validated signed PDF attached
 		if notification_name:
 			_send_esign_notification(notification_name, doc, file_doc, audit_data, pdf_hash)
-	finally:
-		if prev_request is _UNSET:
-			if hasattr(frappe.local, "request"):
-				del frappe.local.request
-		else:
-			frappe.local.request = prev_request
+
+
+def attach_print_to_document(
+	doc: Document,
+	print_format: str,
+	request_data: RequestData,
+	audit_data: AuditData,
+	notification_name: str | None = None,
+):
+	"""Background job: render the signed PDF and attach it to the document.
+
+	The audit trail (the Communication, its copy of the PDF and the notification) is written
+	by `record_signature`, a second job queued to start once this job's transaction has
+	committed. The File has to be committed before the Communication updates the document's
+	`_comments`: cloud storage's file association may have changed the document too, and
+	doing both in one transaction deadlocked.
+	"""
+	from frappe import attach_print
+
+	with _job_request(request_data):
+		# Refetch the document to ensure latest data
+		doc.reload()
+
+		# Generate the PDF
+		timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+		print_data = attach_print(
+			doctype=doc.doctype,
+			name=doc.name,
+			file_name=f"{doc.name}_signed_{timestamp_str}",
+			print_format=print_format,
+			doc=doc,
+			print_letterhead=False,
+		)
+
+		# Compute SHA-256 hash of the PDF content
+		pdf_content = print_data["fcontent"]
+		pdf_hash = hashlib.sha256(pdf_content).hexdigest()
+
+		# Attach the signed PDF to the document
+		# Note: content_hash must be set explicitly for cloud_storage deduplication to work,
+		# as cloud_storage's validate() doesn't call the core File validate which generates it
+		file_doc = cast(
+			File,
+			frappe.get_doc(
+				{
+					"doctype": "File",
+					"file_name": print_data["fname"],
+					"attached_to_doctype": doc.doctype,
+					"attached_to_name": doc.name,
+					"folder": "Home/Attachments",
+					"is_private": True,
+					"content": pdf_content,
+					"content_hash": get_content_hash(pdf_content),
+				}
+			),
+		)
+		file_doc.insert(ignore_permissions=True)
+
+		if _is_cloud_storage_file(file_doc):
+			# Extract s3_key from the file_url and persist it
+			s3_key = str(file_doc.file_url or "").replace("/api/method/retrieve?key=", "")
+			if s3_key:
+				file_doc.db_set("s3_key", s3_key)
+
+	frappe.enqueue(
+		record_signature,
+		queue="short",
+		timeout=300,
+		enqueue_after_commit=True,
+		doctype=doc.doctype,
+		name=doc.name,
+		file_name=file_doc.name,
+		pdf_hash=pdf_hash,
+		request_data=request_data,
+		audit_data=audit_data,
+		notification_name=notification_name,
+	)
 
 
 @frappe.whitelist()
@@ -890,13 +942,16 @@ def download_signed_pdf(doctype: str, docname: str, key: str = ""):
 	# there instead.
 	if file_url.startswith("/api/method/retrieve"):
 		full_file = frappe.get_doc("File", file_doc.get("name"))
-		sharing_uuid = full_file.get("sharing_link")
-		if not sharing_uuid:
-			sharing_uuid = uuid.uuid4()
-			full_file.db_set("sharing_link", str(int(sharing_uuid) >> 64))
-			frappe.db.commit()  # ensure sharing_link is saved before redirect
+		sharing_link = full_file.get("sharing_link")
+		if not sharing_link:
+			# The same key format cloud_storage's own get_sharing_link writes.
+			sharing_link = str(uuid.uuid4().int >> 64)
+			full_file.db_set("sharing_link", sharing_link)
+			# A GET request is rolled back at its end unless it asks to commit; the link must
+			# exist by the time the browser follows the redirect.
+			frappe.local.flags.commit = True
 		frappe.local.response["type"] = "redirect"
-		frappe.local.response["location"] = f"/api/method/share?key={sharing_uuid}"
+		frappe.local.response["location"] = f"/api/method/share?key={sharing_link}"
 		return
 
 	# Handle private vs public files (local storage)
