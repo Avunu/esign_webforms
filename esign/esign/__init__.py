@@ -100,7 +100,8 @@ def can_esign(doctype: str, doc: str | dict) -> bool:
 			doc = frappe._dict(json.loads(doc))
 
 		for method in hooks:
-			result = frappe.call(method, doc=doc)
+			# The methods are the installed apps' can_esign hooks, never a request argument.
+			result = frappe.call(method, doc=doc)  # nosemgrep: frappe-codeinjection-eval
 			if not result:
 				return False
 		return True
@@ -112,19 +113,19 @@ def can_esign(doctype: str, doc: str | dict) -> bool:
 	return bool(esign_web_form)
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def send_esign_email(
-	doctype,
-	name,
-	recipients,
-	subject,
-	message,
-	web_form,
-	cc=None,
-	bcc=None,
-	print_format=None,
-	send_me_a_copy=False,
-	email_account=None,
+	doctype: str,
+	name: str,
+	recipients: str | list[str],
+	subject: str,
+	message: str,
+	web_form: str,
+	cc: str | list[str] | None = None,
+	bcc: str | list[str] | None = None,
+	print_format: str | None = None,
+	send_me_a_copy: bool = False,
+	email_account: str | None = None,
 ):
 	"""Send eSign email with embedded eSign link"""
 

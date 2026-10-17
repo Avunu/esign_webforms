@@ -463,8 +463,10 @@ def _send_esign_notification(
 		# renders them from, with the same sandboxed environment.
 		subject = notification.subject
 		if subject and "{" in subject:
+			# A System Manager's template (above), not user input.
 			subject = frappe.render_template(subject, context)  # nosemgrep: frappe-ssti
 
+		# A System Manager's template (above), not user input.
 		message = frappe.render_template(notification.message, context) or ""  # nosemgrep: frappe-ssti
 
 		# Append audit trail information to the notification email
@@ -614,7 +616,8 @@ def _job_request(request_data: RequestData) -> Generator[None]:
 def _read_file_bytes(file_doc: File) -> bytes:
 	"""The stored bytes of a local File. File.get_content decodes anything that decodes as
 	text (a PDF often does, as windows-1252), and writing that back would change the bytes."""
-	with open(file_doc.get_full_path(), "rb") as f:
+	# The path is the File document's own, and get_full_path refuses an unsafe one (is_safe_path).
+	with open(file_doc.get_full_path(), "rb") as f:  # nosemgrep: frappe-security-file-traversal
 		return f.read()
 
 
@@ -842,7 +845,8 @@ def get_esign_link(
 		return ""
 
 
-@frappe.whitelist(allow_guest=True)
+# Reviewed guest endpoint: validate_esign_access needs the share key, or the web form's or print permission.
+@frappe.whitelist(allow_guest=True)  # nosemgrep: guest-whitelisted-method
 @rate_limit(key="web_form", limit=30, seconds=60)
 def get_print_html(
 	doctype: str, docname: str, print_format: str = "standard", key: str = "", web_form: str = ""
@@ -919,7 +923,8 @@ def get_print_html(
 	)
 
 
-@frappe.whitelist(allow_guest=True)
+# Reviewed guest endpoint: validate_esign_access needs the share key, or the web form's or print permission.
+@frappe.whitelist(allow_guest=True)  # nosemgrep: guest-whitelisted-method
 @rate_limit(key="esign_download", limit=20, seconds=60)
 def download_signed_pdf(doctype: str, docname: str, key: str = "", web_form: str = ""):
 	"""Download a signed PDF attachment with key-based access validation.
@@ -1035,7 +1040,7 @@ def download_signed_pdf(doctype: str, docname: str, key: str = "", web_form: str
 
 
 @frappe.whitelist()
-def get_esign_web_forms(doctype):
+def get_esign_web_forms(doctype: str):
 	"""Get all eSign-enabled web forms for a given doctype."""
 	return frappe.get_all(
 		"Web Form",
@@ -1177,9 +1182,11 @@ def _enqueue_print_attachment(doc: Document, wf: EsignWebForm):
 	)
 
 
-@frappe.whitelist(allow_guest=True)
+# Reviewed guest endpoint, as frappe's own web form accept: an update needs the share key or
+# a write permission, and a new document only what the web form allows.
+@frappe.whitelist(allow_guest=True)  # nosemgrep: guest-whitelisted-method
 @rate_limit(key="web_form", limit=10, seconds=60)
-def accept(web_form, data):
+def accept(web_form: str, data: str):
 	"""Custom accept function for eSign web forms that properly handles Guest permissions.
 
 	This overrides the default web form accept to ensure that eSign forms with valid
@@ -1188,14 +1195,14 @@ def accept(web_form, data):
 	"""
 	from frappe.website.doctype.web_form.web_form import accept as base_accept
 
-	data = frappe._dict(json.loads(data))
+	form = frappe._dict(json.loads(data))
 
 	# Check if this is an eSign-enabled web form
 	wf = cast(EsignWebForm, frappe.get_lazy_doc("Web Form", web_form))
 
 	# If not eSign-enabled, use the base accept function
 	if not getattr(wf, "esign_enabled", False):
-		return base_accept(web_form, json.dumps(data))
+		return base_accept(web_form, json.dumps(form))
 
 	# For eSign forms, we need to handle permissions specially
 	doctype = wf.doc_type
@@ -1206,10 +1213,10 @@ def accept(web_form, data):
 		frappe.form_dict.key = extract_param_from_referrer("key")
 
 	# Validate the key if we have one and this is an update
-	if data.name and frappe.form_dict.get("key"):
+	if form.name and frappe.form_dict.get("key"):
 		try:
 			# Validate the key gives us access to this document
-			doc = frappe.get_doc(doctype, data.name)
+			doc = frappe.get_doc(doctype, form.name)
 			validate_print_permission(doc)
 		except frappe.PermissionError, frappe.exceptions.LinkExpired:
 			frappe.throw(_("Invalid or expired access key"), frappe.PermissionError)
@@ -1219,9 +1226,9 @@ def accept(web_form, data):
 	# saving with permission checks on). Otherwise anyone who knows a document name could
 	# overwrite its form fields.
 	if (
-		data.name
-		and not wf.has_web_form_permission(doctype, data.name, "write")
-		and not frappe.has_permission(doctype, "write", data.name)
+		form.name
+		and not wf.has_web_form_permission(doctype, form.name, "write")
+		and not frappe.has_permission(doctype, "write", form.name)
 	):
 		frappe.throw(_("You are not permitted to update this document"), frappe.PermissionError)
 
@@ -1233,15 +1240,15 @@ def accept(web_form, data):
 		frappe.session.user = "Guest"
 
 	try:
-		if data.name and not wf.allow_edit:
+		if form.name and not wf.allow_edit:
 			frappe.throw(_("You are not allowed to update this Web Form Document"))
 
 		frappe.flags.in_web_form = True
 		meta = frappe.get_meta(doctype)
 
-		is_new = not data.name
+		is_new = not form.name
 		# For eSign forms, always get doc with ignore_permissions since we validated the key
-		doc = frappe.get_doc(doctype, data.name) if data.name else frappe.new_doc(doctype)
+		doc = frappe.get_doc(doctype, form.name) if form.name else frappe.new_doc(doctype)
 
 		# Set ignore_mandatory flag if allow_incomplete is enabled
 		if wf.allow_incomplete:
@@ -1256,7 +1263,7 @@ def accept(web_form, data):
 		for field in wf.web_form_fields:
 			fieldname = _fieldname(field)
 			df = meta.get_field(fieldname)
-			value = data.get(fieldname, "")
+			value = form.get(fieldname, "")
 
 			if df and df.fieldtype in ("Attach", "Attach Image"):
 				if value and "data:" in value and "base64" in value:

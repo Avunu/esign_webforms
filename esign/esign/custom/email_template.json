@@ -1,41 +1,36 @@
 {
-    "custom_fields": [
-        {
-            "dt": "Email Template",
-            "fieldname": "esign_column_break",
-            "fieldtype": "Column Break",
-            "options": "",
-            "insert_after": "subject",
-            "is_system_generated": 0,
-            "module": "eSign",
-            "name": "Email Template-esign_column_break"
-        },
-        {
-            "dt": "Email Template",
-            "fieldname": "esign_request",
-            "fieldtype": "Check",
-            "options": "",
-            "insert_after": "esign_column_break",
-            "is_system_generated": 0,
-            "label": "eSign Request",
-            "module": "eSign",
-            "name": "Email Template-esign_request"
-        },
-        {
-            "dt": "Email Template",
-            "fieldname": "message_section_break",
-            "fieldtype": "Section Break",
-            "options": "",
-            "insert_after": "esign_request",
-            "is_system_generated": 0,
-            "label": "Message Template",
-            "module": "eSign",
-            "name": "Email Template-message_section_break"
-        }
-    ],
-    "custom_perms": [],
-    "doctype": "Email Template",
-    "links": [],
-    "property_setters": [],
-    "sync_on_migrate": 1
+  "custom_fields": [
+    {
+      "dt": "Email Template",
+      "fieldname": "esign_column_break",
+      "fieldtype": "Column Break",
+      "insert_after": "subject",
+      "is_system_generated": 0,
+      "module": "eSign",
+      "name": "Email Template-esign_column_break"
+    },
+    {
+      "dt": "Email Template",
+      "fieldname": "esign_request",
+      "fieldtype": "Check",
+      "insert_after": "esign_column_break",
+      "is_system_generated": 0,
+      "label": "eSign Request",
+      "module": "eSign",
+      "name": "Email Template-esign_request"
+    },
+    {
+      "dt": "Email Template",
+      "fieldname": "message_section_break",
+      "fieldtype": "Section Break",
+      "insert_after": "esign_request",
+      "is_system_generated": 0,
+      "label": "Message Template",
+      "module": "eSign",
+      "name": "Email Template-message_section_break"
+    }
+  ],
+  "doctype": "Email Template",
+  "property_setters": [],
+  "sync_on_migrate": 1
 }
