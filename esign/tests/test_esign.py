@@ -241,6 +241,34 @@ class TestTimeline(EsignDeskTestCase):
 		self.assertIsNone(by_signer["fallback@example.com"]["template_data"]["file_url"])
 		self.assertEqual(get_timeline_content("ToDo", "nothing"), [])
 
+	def test_signer_controlled_values_are_escaped(self):
+		payload = '<img src=x onerror="alert(1)">'
+		audit = {
+			"signer_name": payload,
+			"signer_email": payload,
+			"user_agent": payload,
+			"ip_address": payload,
+			"web_form": payload,
+			"signed_fields": [payload],
+		}
+		frappe.get_doc(
+			{
+				"doctype": "Communication",
+				"communication_type": "eSign",
+				"subject": "Signed",
+				"content": json.dumps(audit),
+				"reference_doctype": TEST_DOCTYPE,
+				"reference_name": self.doc.name,
+			}
+		).insert(ignore_permissions=True)
+
+		data = get_timeline_content(TEST_DOCTYPE, str(self.doc.name))[0]["template_data"]
+		escaped = "&lt;img src=x onerror=&quot;alert(1)&quot;&gt;"
+		for key in ("signer_name", "signer_email", "user_agent", "ip_address", "web_form"):
+			self.assertEqual(data[key], escaped, key)
+		self.assertEqual(data["signed_fields"], [escaped])
+		self.assertIsNone(data["timestamp"])
+
 
 class TestEmailTemplate(EsignDeskTestCase):
 	def test_esign_templates_and_context(self):

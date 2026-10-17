@@ -21,7 +21,7 @@ from frappe.model.document import Document
 from frappe.rate_limiter import rate_limit
 from frappe.twofactor import get_qr_svg_code
 from frappe.types import DF
-from frappe.utils import cint, escape_html, get_frappe_version, now
+from frappe.utils import cint, escape_html, get_frappe_version, now, validate_email_address
 from frappe.website.doctype.web_form.web_form import WebForm as BaseWebForm
 from frappe.www.printview import validate_print_permission
 
@@ -1041,8 +1041,9 @@ def _collect_audit_data(doc: Document, wf: EsignWebForm, print_format: str) -> A
 	signer_name = None
 
 	# 1. From the email URL search param (link was sent via email)
+	# The parameter is the signer's own input, so only a valid address is recorded.
 	email_param = extract_param_from_referrer("email")
-	if email_param:
+	if email_param and validate_email_address(email_param) == email_param:
 		signer_email = email_param
 
 	# 2. From a Data(Email) field on the web form

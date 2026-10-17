@@ -11,10 +11,15 @@ import frappe
 import frappe.desk.form.load
 from frappe import _
 from frappe.core.doctype.communication.communication import Communication
-from frappe.utils import now
+from frappe.utils import escape_html, now
 
 # Communication type for eSign audit trail
 ESIGN_COMMUNICATION_TYPE = "eSign"
+
+
+def _escape(value: object) -> str | None:
+	"""A stored audit value, HTML-escaped for the timeline card (None stays None)."""
+	return None if value is None else escape_html(str(value))
 
 
 def get_timeline_content(doctype: str, docname: str) -> list[dict]:
@@ -64,18 +69,21 @@ def get_timeline_content(doctype: str, docname: str) -> list[dict]:
 				"is_card": True,
 				"creation": comm.communication_date or comm.creation,
 				"template": "esign_timeline",
+				# The timeline template prints these unescaped ({{ }} is raw in frappe's
+				# microtemplates), and the signer controls several of them (user agent, email
+				# parameter, form fields), so every value is escaped here.
 				"template_data": {
 					"creation": str(comm.creation),
-					"file_url": file_url,
-					"signer_name": audit_data.get("signer_name") or comm.sender_full_name,
-					"signer_email": audit_data.get("signer_email") or comm.sender,
-					"timestamp": audit_data.get("timestamp"),
-					"ip_address": audit_data.get("ip_address"),
-					"user_agent": audit_data.get("user_agent"),
-					"web_form": audit_data.get("web_form"),
-					"print_format": audit_data.get("print_format"),
-					"signed_fields": audit_data.get("signed_fields", []),
-					"pdf_hash": audit_data.get("pdf_hash"),
+					"file_url": _escape(file_url),
+					"signer_name": _escape(audit_data.get("signer_name") or comm.sender_full_name),
+					"signer_email": _escape(audit_data.get("signer_email") or comm.sender),
+					"timestamp": _escape(audit_data.get("timestamp")),
+					"ip_address": _escape(audit_data.get("ip_address")),
+					"user_agent": _escape(audit_data.get("user_agent")),
+					"web_form": _escape(audit_data.get("web_form")),
+					"print_format": _escape(audit_data.get("print_format")),
+					"signed_fields": [_escape(field) for field in audit_data.get("signed_fields") or []],
+					"pdf_hash": _escape(audit_data.get("pdf_hash")),
 				},
 			}
 		)

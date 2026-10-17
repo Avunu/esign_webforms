@@ -648,6 +648,12 @@ class TestAccept(EsignTestCase):
 				esign_web_form._collect_audit_data(self.doc, wf, "Standard")["signer_email"],
 				"param@example.com",
 			)
+		# An email parameter that is not a single valid address is not recorded.
+		with signing_request(referrer="https://example.com/form?email=%3Cimg%20src%3Dx%3E"):
+			self.assertEqual(
+				esign_web_form._collect_audit_data(self.doc, wf, "Standard")["signer_email"],
+				"field@example.com",
+			)
 		with signing_request():
 			self.assertEqual(
 				esign_web_form._collect_audit_data(self.doc, wf, "Standard")["signer_email"],
