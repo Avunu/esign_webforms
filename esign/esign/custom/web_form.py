@@ -232,10 +232,12 @@ class EsignWebForm(BaseWebForm):
 
 		# Get document without permission check - we'll validate via share key
 		doc = frappe.get_doc(self.doc_type, cur_doc_name)
-		doc.flags.ignore_permissions = True
 
-		# Validate access via share key or fallback to standard permissions
+		# Validate access via share key or fallback to standard permissions. The document is
+		# only marked permission-free afterwards: frappe's website permission check (part of
+		# the fallback) passes any document that already carries ignore_permissions.
 		validate_esign_key(key, doc)
+		doc.flags.ignore_permissions = True
 
 		# Allow public access to the web form if validation passes
 		print_format = frappe.form_dict.get("format", self.print_format) or "standard"
@@ -336,7 +338,6 @@ class EsignWebForm(BaseWebForm):
 			if key:
 				try:
 					doc = frappe.get_doc(doctype, name)
-					doc.flags.ignore_permissions = True
 					validate_esign_key(key, doc, require_key=True)
 					return True
 				except frappe.PermissionError:
@@ -825,12 +826,13 @@ def get_print_html(
 
 	# Get the document without permission checks - we'll validate via share key
 	doc = frappe.get_doc(doctype, docname)
-	doc.flags.ignore_permissions = True
 
 	# Validate access via share key or fallback to standard permissions. This has to run
-	# before ignore_print_permissions is set: without a key, the fallback is the standard
-	# print permission check, which that flag turns off.
+	# before the document or the request is marked permission-free: without a key, the
+	# fallback is the standard print permission check, which ignore_print_permissions turns
+	# off and which passes a document that carries ignore_permissions.
 	validate_esign_key(key, doc)
+	doc.flags.ignore_permissions = True
 
 	# Access is granted: skip the renderer's own permission checks, which would only add
 	# msgprint warnings for a Guest holding a valid key.
@@ -888,9 +890,9 @@ def download_signed_pdf(doctype: str, docname: str, key: str = ""):
 
 	# Get the document without permission checks - we'll validate via share key
 	doc = frappe.get_doc(doctype, docname)
-	doc.flags.ignore_permissions = True
 
-	# Validate access via share key - require key for guest access
+	# Validate access via share key - require key for guest access. Without a key a user
+	# needs print permission, which a document marked ignore_permissions would skip.
 	validate_esign_key(key, doc, require_key=(frappe.session.user == "Guest"))
 
 	# Find the signed PDF for this document
