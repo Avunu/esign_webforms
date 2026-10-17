@@ -43,6 +43,11 @@ frappe-major = 16
 [tool.frappe-nix.dev-shell]
 frappe-nix-url = "github:Avunu/frappe-nix/e95f67f97de1322c89df9ffbc9218c31d4ca83ba"
 
+# Jinja (www, web form) and frappe microtemplates: oxfmt would re-wrap their tags and split
+# translatable strings, which changes the translation keys.
+[tool.frappe-nix.js.oxfmt]
+ignore = ["esign/**/*.html"]
+
 [tool.ty.environment]
 python-version = "3.14"
 
