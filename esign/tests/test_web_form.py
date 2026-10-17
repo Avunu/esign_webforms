@@ -217,7 +217,7 @@ class TestSigningPage(EsignTestCase):
 		self.assertIn(f'key: "{self.key}"', content)
 		self.assertIn('print_format: "Standard"', content)
 		self.assertIn("signer@example.com", content)
-		self.assertIn("esign.web.bundle.ts", content)
+		self.assertIn("esign.web.bundle.js", content)
 		self.assertIn("esign-fonts.bundle.css", content)
 		self.assertIn("frappe.utils.print_format.download_pdf", content)
 		self.assertNotIn("esign-completed", content)

@@ -68,8 +68,8 @@ class TestHooks(EsignDeskTestCase):
 
 	def test_assets_are_named_as_their_bundles(self):
 		hooks = frappe.get_hooks(app_name="esign")
-		# assets.json keys a bundle by its source file name, .ts included.
-		self.assertEqual(hooks["app_include_js"], ["esign.desk.bundle.ts", "esign.control.bundle.ts"])
+		# .js entry names: --using-cached keys assets.json by the built file name, always .js.
+		self.assertEqual(hooks["app_include_js"], ["esign.desk.bundle.js", "esign.control.bundle.js"])
 		self.assertEqual(hooks["app_include_css"], ["esign.control.bundle.css", "esign-fonts.bundle.css"])
 
 	def test_jinja_and_timeline_hooks(self):

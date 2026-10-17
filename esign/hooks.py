@@ -8,9 +8,10 @@ app_description = "Collect Electronic Signatures on Frappe Documents via Webform
 app_email = "mail@avu.nu"
 app_license = "MIT"
 
-# Bundles are looked up in assets.json by their source name, so the TypeScript entries are named
-# with .ts; frappe still serves them as compiled .js files.
-app_include_js = ["esign.desk.bundle.ts", "esign.control.bundle.ts"]
+# The esbuild entries are .js files that import the TypeScript modules: `bench build` keys
+# assets.json by the entry's name and `bench build --using-cached` by the built file's, and only a
+# .js entry gets the same key from both.
+app_include_js = ["esign.desk.bundle.js", "esign.control.bundle.js"]
 app_include_css = [
 	"esign.control.bundle.css",
 	"esign-fonts.bundle.css",

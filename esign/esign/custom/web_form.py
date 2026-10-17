@@ -293,7 +293,7 @@ class EsignWebForm(BaseWebForm):
 		)
 		context.web_include_js.extend(
 			[
-				"esign.web.bundle.ts",
+				"esign.web.bundle.js",
 			]
 		)
 		context.template = "esign/templates/esign.html"
