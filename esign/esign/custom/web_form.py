@@ -694,6 +694,10 @@ def get_esign_link(
 			doc = frappe.get_doc(doc["doctype"], doc["name"])
 		except Exception as e:
 			return str(e)
+		# A reference from a request: the link carries a share key that opens the document to
+		# whoever holds it, so the caller must be allowed to email the document (as for
+		# send_esign_email). Server-side callers (Jinja, Python) pass the Document itself.
+		frappe.has_permission(doc.doctype, ptype="email", doc=doc, throw=True)
 
 	try:
 		web_form = EsignWebForm("Web Form", web_form_name)
@@ -757,12 +761,14 @@ def get_print_html(
 	doc = frappe.get_doc(doctype, docname)
 	doc.flags.ignore_permissions = True
 
-	# Skip internal permission checks since we're using key-based auth
-	# This prevents msgprint warnings from has_permission checks
-	frappe.flags.ignore_print_permissions = True
-
-	# Validate access via share key or fallback to standard permissions
+	# Validate access via share key or fallback to standard permissions. This has to run
+	# before ignore_print_permissions is set: without a key, the fallback is the standard
+	# print permission check, which that flag turns off.
 	validate_esign_key(key, doc)
+
+	# Access is granted: skip the renderer's own permission checks, which would only add
+	# msgprint warnings for a Guest holding a valid key.
+	frappe.flags.ignore_print_permissions = True
 
 	# Get print format document
 	meta = frappe.get_meta(doctype)
@@ -1090,6 +1096,11 @@ def accept(web_form, data):
 			validate_print_permission(doc)
 		except frappe.PermissionError, frappe.exceptions.LinkExpired:
 			frappe.throw(_("Invalid or expired access key"), frappe.PermissionError)
+
+	# An update needs the document's share key or web form write permission, as in frappe's
+	# own accept; otherwise anyone who knows a document name could overwrite its form fields.
+	if data.name and not wf.has_web_form_permission(doctype, data.name, "write"):
+		frappe.throw(_("You are not permitted to update this document"), frappe.PermissionError)
 
 	# Now proceed with the form submission using ignore_permissions
 	files = []

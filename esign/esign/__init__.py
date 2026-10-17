@@ -126,6 +126,10 @@ def send_esign_email(
 	except frappe.DoesNotExistError:
 		frappe.throw(_("Document {0} {1} not found").format(doctype, name))
 
+	# The email carries a share key that opens the document to its recipients, so the sender
+	# needs the same permission frappe's own email dialog asks for.
+	frappe.has_permission(doctype, ptype="email", doc=name, throw=True)
+
 	# Validate web form
 	from esign.esign.custom.web_form import EsignWebForm, get_esign_link
 
