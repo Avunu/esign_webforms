@@ -1,10 +1,6 @@
 # Copyright (c) 2026, Avunu LLC and contributors
 # For license information, please see license.txt
 
-import frappe
-
-frappe_version = int(frappe.__version__.split(".")[0])
-
 app_name = "esign"
 app_title = "eSign"
 app_publisher = "Avunu LLC"
@@ -33,16 +29,12 @@ doctype_js = {
 	"Web Form": "public/js/web_form.js",
 }
 
-if frappe_version >= 16:
-	extend_doctype_class = {
-		"Web Form": "esign.esign.custom.web_form.EsignWebForm",
-		"Email Template": "esign.esign.custom.email_template.EsignEmailTemplate",
-	}
-else:
-	override_doctype_class = {
-		"Web Form": "esign.esign.custom.web_form.EsignWebForm",
-		"Email Template": "esign.esign.custom.email_template.EsignEmailTemplate",
-	}
+# Frappe v16 composes these onto the stock controllers (and any other app's extensions),
+# so each class subclasses the stock controller only.
+extend_doctype_class = {
+	"Web Form": "esign.esign.custom.web_form.EsignWebForm",
+	"Email Template": "esign.esign.custom.email_template.EsignEmailTemplate",
+}
 
 
 jinja = {

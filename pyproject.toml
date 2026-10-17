@@ -7,7 +7,7 @@ readme = "README.md"
 classifiers = ["License :: OSI Approved :: MIT License"]
 dynamic = ["version"]
 dependencies = [
-	# "frappe~=15.0.0" # Installed and managed by bench.
+	# frappe is installed and managed by bench; see [tool.bench.frappe-dependencies].
 ]
 
 [build-system]

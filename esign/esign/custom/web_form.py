@@ -5,7 +5,7 @@ import hashlib
 import json
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, TypedDict, cast
+from typing import TypedDict, cast
 
 import frappe
 from frappe import _
@@ -60,34 +60,6 @@ def validate_esign_key(key: str, doc: Document, require_key: bool = False) -> bo
 	# No key provided - fall back to standard permission check
 	validate_print_permission(doc)
 	return True
-
-
-FRAPPE_MAJOR = int(frappe.__version__.split(".")[0])
-
-# Choose the base class for EsignWebForm.
-#
-# Frappe v16+ registers this class via `extend_doctype_class` (see hooks.py) and composes
-# the final controller as `type(..., (*extensions_in_reverse_install_order, WebForm))`.
-# The payments app registers its PaymentWebForm the same way, so its behaviour is still
-# mixed into the final class. If we also inherited from PaymentWebForm here, installing
-# esign before payments would produce bases (PaymentWebForm, EsignWebForm, WebForm),
-# which has no consistent MRO and breaks loading every Web Form. So on v16+ we only
-# subclass the stock WebForm.
-#
-# Frappe v15 uses `override_doctype_class`, where the last app wins; there we keep
-# inheriting from PaymentWebForm (when installed) so payment behaviour isn't lost.
-if TYPE_CHECKING or FRAPPE_MAJOR >= 16:
-	_EsignWebFormBase = BaseWebForm
-else:
-	try:
-		from payments.overrides.payment_webform import PaymentWebForm  # type: ignore
-	except ImportError:
-		# Dummy mixin when payments isn't installed
-		class PaymentWebForm:
-			pass
-
-	class _EsignWebFormBase(PaymentWebForm, BaseWebForm):
-		pass
 
 
 class RequestData(TypedDict):
@@ -149,8 +121,14 @@ def _find_email_fieldname(wf: EsignWebForm) -> str | None:
 	return None
 
 
-class EsignWebForm(_EsignWebFormBase):
-	"""Custom WebForm override for eSign-specific functionality with custom field types"""
+class EsignWebForm(BaseWebForm):
+	"""eSign behaviour for Web Form, registered through `extend_doctype_class`.
+
+	Frappe composes the final controller from the stock WebForm and every installed app's
+	extension (payments registers one too), so this subclasses the stock WebForm only:
+	subclassing another app's extension would break the class hierarchy whenever that app is
+	installed after esign.
+	"""
 
 	# Custom fields from ../custom/web_form.json
 	esign_enabled: DF.Check | None
