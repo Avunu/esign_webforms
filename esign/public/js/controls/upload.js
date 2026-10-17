@@ -1,3 +1,6 @@
+// Copyright (c) 2026, Avunu LLC and contributors
+// For license information, please see license.txt
+
 import { toDom } from "hast-util-to-dom";
 
 /**
@@ -26,12 +29,7 @@ export class ControlUpload extends frappe.ui.form.ControlData {
 					tagName: "button",
 					properties: {
 						type: "button",
-						className: [
-							"btn",
-							"btn-default",
-							"btn-sm",
-							"btn-upload",
-						],
+						className: ["btn", "btn-default", "btn-sm", "btn-upload"],
 					},
 					children: [{ type: "text", value: __("Upload") }],
 				},
@@ -41,9 +39,7 @@ export class ControlUpload extends frappe.ui.form.ControlData {
 					properties: {
 						type: "file",
 						className: ["hidden"],
-						accept:
-							this.df.options?.allowed_file_types?.join(",") ||
-							"image/*",
+						accept: this.df.options?.allowed_file_types?.join(",") || "image/*",
 					},
 					children: [],
 				},
@@ -100,12 +96,12 @@ export class ControlUpload extends frappe.ui.form.ControlData {
 
 		// Convert to base64
 		const reader = new FileReader();
-		reader.onload = (e) => {
-			const dataurl = e.target.result;
+		reader.addEventListener("load", (event) => {
+			const dataurl = event.target.result;
 			this.set_value(dataurl);
 			this.value = dataurl;
 			this.set_preview(dataurl);
-		};
+		});
 		reader.readAsDataURL(file);
 	}
 

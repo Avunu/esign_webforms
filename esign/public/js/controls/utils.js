@@ -1,3 +1,6 @@
+// Copyright (c) 2026, Avunu LLC and contributors
+// For license information, please see license.txt
+
 import { toDom as hastToDom } from "hast-util-to-dom";
 
 /**
@@ -69,13 +72,7 @@ export function toDom(hast, context) {
  * // Custom size
  * createIconHast("add", { width: "24px", height: "24px" })
  */
-export function createIconHast(
-	icon_name,
-	size = "sm",
-	icon_class = "",
-	icon_style = "",
-	svg_class = "",
-) {
+export function createIconHast(icon_name, size = "sm", icon_class = "", icon_style = "", svg_class = "") {
 	let size_class = "";
 	const is_espresso = icon_name.startsWith("es-");
 
@@ -90,9 +87,7 @@ export function createIconHast(
 	// Determine SVG class based on icon type
 	let base_svg_class;
 	if (is_espresso) {
-		base_svg_class = icon_name.startsWith("es-solid")
-			? "es-icon es-solid"
-			: "es-icon es-line";
+		base_svg_class = icon_name.startsWith("es-solid") ? "es-icon es-solid" : "es-icon es-line";
 	} else {
 		base_svg_class = "icon";
 	}

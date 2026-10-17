@@ -9,8 +9,7 @@
 @media screen {
 	:root {
 		display: block !important;
-		overflow-x: clip !important;
-		overflow-y: hidden !important; // Prevent double scrollbars
+		overflow: clip hidden !important; // Prevent double scrollbars
 		scroll-behavior: smooth;
 
 		@include media-breakpoint-down(md) {
@@ -143,8 +142,7 @@
 	// ============================================
 	.esign-document-pane {
 		flex: 1;
-		overflow-y: auto;
-		overflow-x: hidden;
+		overflow: hidden auto;
 		scroll-behavior: smooth;
 		background-color: var(--bg-color);
 		padding: 1rem;
@@ -572,31 +570,31 @@
 
 	// Override toast animations for bottom-center positioning
 	.desk-alert {
-		-webkit-animation-name: slideUpFade !important;
-		animation-name: slideUpFade !important;
+		animation-name: slide-up-fade !important;
 
 		&.out {
-			-webkit-animation-name: slideDownFade !important;
-			animation-name: slideDownFade !important;
+			animation-name: slide-down-fade !important;
 		}
 	}
 
-	@keyframes slideUpFade {
+	@keyframes slide-up-fade {
 		0% {
 			transform: translateY(100px);
 			opacity: 0;
 		}
+
 		100% {
 			transform: translateY(0);
 			opacity: 1;
 		}
 	}
 
-	@keyframes slideDownFade {
+	@keyframes slide-down-fade {
 		0% {
 			opacity: 1;
 			transform: translateY(0);
 		}
+
 		100% {
 			opacity: 0;
 			transform: translateY(50px);

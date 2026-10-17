@@ -1,3 +1,7 @@
+# Copyright (c) 2026, Avunu LLC and contributors
+# For license information, please see license.txt
+
+import contextlib
 import json
 
 import frappe
@@ -38,10 +42,8 @@ def get_timeline_content(doctype: str, docname: str) -> list[dict]:
 		# Parse the JSON content for audit data
 		audit_data = {}
 		if comm.content:
-			try:
+			with contextlib.suppress(json.JSONDecodeError, TypeError):
 				audit_data = json.loads(comm.content)
-			except (json.JSONDecodeError, TypeError):
-				pass
 
 		# Get the attached signed PDF file URL using the patched get_attachments
 		# This works for both standard Frappe and cloud_storage setups
@@ -95,10 +97,7 @@ def can_esign(doctype: str, doc: str | dict) -> bool:
 		"Web Form", dn={"doc_type": doctype, "published": 1, "esign_enabled": 1}
 	)
 
-	if esign_web_form:
-		return True
-
-	return False
+	return bool(esign_web_form)
 
 
 @frappe.whitelist()
