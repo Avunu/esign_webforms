@@ -8,10 +8,12 @@ app_description = "Collect Electronic Signatures on Frappe Documents via Webform
 app_email = "mail@avu.nu"
 app_license = "MIT"
 
-app_include_js = ["esign.desk.bundle.js", "esign.control.bundle.js"]
+# Bundles are looked up in assets.json by their source name, so the TypeScript entries are named
+# with .ts; frappe still serves them as compiled .js files.
+app_include_js = ["esign.desk.bundle.ts", "esign.control.bundle.ts"]
 app_include_css = [
 	"esign.control.bundle.css",
-	"/assets/esign/dist/esign-fonts.css",
+	"esign-fonts.bundle.css",
 ]
 
 # Install/migrate hooks for communication type registration

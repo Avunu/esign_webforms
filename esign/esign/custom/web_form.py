@@ -285,12 +285,12 @@ class EsignWebForm(BaseWebForm):
 			[
 				"esign.control.bundle.css",
 				"esign.web.bundle.css",
-				"/assets/esign/dist/esign-fonts.css",
+				"esign-fonts.bundle.css",
 			]
 		)
 		context.web_include_js.extend(
 			[
-				"esign.web.bundle.js",
+				"esign.web.bundle.ts",
 			]
 		)
 		context.template = "esign/templates/esign.html"

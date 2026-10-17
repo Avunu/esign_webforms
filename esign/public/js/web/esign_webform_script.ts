@@ -8,8 +8,27 @@
  * It extends WebForm to use our custom accept endpoint and registers
  * our custom controls for the web/public frontend.
  */
-import WebFormList from "../../../../../frappe/frappe/public/js/frappe/web_form/web_form_list";
-import WebForm from "../../../../../frappe/frappe/public/js/frappe/web_form/web_form";
+import type { FrappeDocBase, FrappeResponse } from "frappe-types";
+// Also brings in the website globals frappe adds on a web form page (frappe.ready, …).
+import type { WebFormDoc } from "frappe-types/web";
+import WebFormList from "frappe/public/js/frappe/web_form/web_form_list";
+import WebForm from "frappe/public/js/frappe/web_form/web_form";
+import { ControlSignature } from "../controls/signature";
+import { ControlUpload } from "../controls/upload";
+
+/** What esign.esign.custom.web_form.get_print_html returns. */
+interface PrintHtmlResponse {
+	print_html: string;
+	print_style: string;
+}
+
+/** The fields of a saved web form document that the save handler reads. */
+interface SavedDoc {
+	name: string;
+	doctype: string;
+	attachment?: string;
+	file?: string;
+}
 
 // ============================================================================
 // Document Preview Functions
@@ -18,7 +37,7 @@ import WebForm from "../../../../../frappe/frappe/public/js/frappe/web_form/web_
 /**
  * Scale print format to fit the document pane width
  */
-function scaleToFitDocumentPane() {
+function scaleToFitDocumentPane(): void {
 	const documentPane = document.querySelector(".esign-document-pane");
 	const shadowHost = document.getElementById("shadow-host");
 
@@ -26,13 +45,13 @@ function scaleToFitDocumentPane() {
 		return;
 	}
 
-	const printFormat = shadowHost.shadowRoot.querySelector(".print-format");
+	const printFormat = shadowHost.shadowRoot.querySelector<HTMLElement>(".print-format");
 	if (!printFormat) {
 		return;
 	}
 
 	// Reset zoom to measure natural width
-	printFormat.style.zoom = "100%";
+	printFormat.style.setProperty("zoom", "100%");
 
 	// Get the natural width of the print format content
 	const contentWidth = printFormat.scrollWidth;
@@ -51,24 +70,24 @@ function scaleToFitDocumentPane() {
 	}
 
 	// Apply the scale transformation
-	printFormat.style.zoom = `${scale}%`;
+	printFormat.style.setProperty("zoom", `${scale}%`);
 }
 
 /**
  * Load print HTML asynchronously from the server
- * @returns {Promise} Promise that resolves when content is loaded and rendered
+ * @returns Promise that resolves when content is loaded and rendered
  */
-function loadPrintHtml() {
+function loadPrintHtml(): Promise<void> {
 	const ctx = frappe.esign_context;
 	if (!ctx || !ctx.doctype || !ctx.name) {
 		console.error("eSign context not available");
-		return Promise.reject("Context not available");
+		return Promise.reject(new Error("Context not available"));
 	}
 
 	const shadowHost = document.getElementById("shadow-host");
 	if (!shadowHost || !shadowHost.shadowRoot) {
 		console.error("Shadow host not available");
-		return Promise.reject("Shadow host not available");
+		return Promise.reject(new Error("Shadow host not available"));
 	}
 
 	const shadowRoot = shadowHost.shadowRoot;
@@ -79,8 +98,9 @@ function loadPrintHtml() {
 	if (loadingEl) loadingEl.classList.remove("hide");
 	if (printContent) printContent.classList.add("hide");
 
-	return frappe
-		.call({
+	// Promise.resolve adopts the jqXHR, so callers get a standard promise.
+	return Promise.resolve(
+		frappe.call<PrintHtmlResponse>({
 			method: "esign.esign.custom.web_form.get_print_html",
 			args: {
 				doctype: ctx.doctype,
@@ -89,13 +109,14 @@ function loadPrintHtml() {
 				key: ctx.key || "",
 			},
 			freeze: false,
-		})
-		.then((response) => {
+		}),
+	)
+		.then((response: FrappeResponse<PrintHtmlResponse>) => {
 			if (response.message) {
 				renderPrintHtml(response.message.print_html, response.message.print_style);
 			}
 		})
-		.catch((error) => {
+		.catch((error: unknown) => {
 			console.error("Failed to load print HTML:", error);
 			if (loadingEl) {
 				loadingEl.innerHTML = '<p class="text-danger">Failed to load document preview.</p>';
@@ -105,10 +126,10 @@ function loadPrintHtml() {
 
 /**
  * Render print HTML into the shadow DOM
- * @param {string} printHtml - The HTML content to render
- * @param {string} printStyle - Additional CSS styles for the print format
+ * @param printHtml - The HTML content to render
+ * @param printStyle - Additional CSS styles for the print format
  */
-function renderPrintHtml(printHtml, printStyle) {
+function renderPrintHtml(printHtml: string, printStyle: string): void {
 	const shadowHost = document.getElementById("shadow-host");
 	if (!shadowHost || !shadowHost.shadowRoot) return;
 
@@ -136,7 +157,7 @@ function renderPrintHtml(printHtml, printStyle) {
 
 	// Re-scale when fonts are loaded
 	if (document.fonts) {
-		document.fonts.ready.then(() => {
+		void document.fonts.ready.then(() => {
 			setTimeout(scaleToFitDocumentPane, 100);
 		});
 	}
@@ -144,9 +165,9 @@ function renderPrintHtml(printHtml, printStyle) {
 
 /**
  * Refresh the document preview (called after form submission)
- * @returns {Promise} Promise that resolves when content is refreshed
+ * @returns Promise that resolves when content is refreshed
  */
-function refreshPrintHtml() {
+function refreshPrintHtml(): Promise<void> {
 	return loadPrintHtml();
 }
 
@@ -157,20 +178,19 @@ window.refreshPrintHtml = refreshPrintHtml;
 /**
  * Initialize document preview functionality
  */
-function initDocumentPreview() {
+function initDocumentPreview(): void {
 	const ctx = frappe.esign_context;
 
 	// Skip loading print HTML if we have a signed PDF (completed documents)
 	if (ctx && ctx.signed_pdf_url) {
-		console.debug("Signed PDF available, skipping print HTML load");
 		return;
 	}
 
 	// Load print HTML for documents that need signing
-	loadPrintHtml();
+	void loadPrintHtml();
 
 	// Re-scale on window resize with debouncing
-	let resizeTimeout;
+	let resizeTimeout: ReturnType<typeof setTimeout> | undefined;
 	window.addEventListener("resize", () => {
 		clearTimeout(resizeTimeout);
 		resizeTimeout = setTimeout(scaleToFitDocumentPane, 150);
@@ -181,24 +201,19 @@ function initDocumentPreview() {
 // Custom Controls Registration
 // ============================================================================
 
-// Import and register eSign controls for web forms
-import { ControlUpload } from "../controls/upload";
-import { ControlSignature } from "../controls/signature";
-
+// Register eSign controls for web forms
 frappe.ui.form.ControlUpload = ControlUpload;
 frappe.ui.form.ControlSignature = ControlSignature;
 
 class EsignWebForm extends WebForm {
-	handle_success(data) {
+	override handle_success(data: unknown): void {
 		// Override to use eSign success card in sidebar
 		const formCard = document.querySelector(".esign-form-card");
 		const successCard = document.getElementById("esign-success-card");
 
 		// Refresh the document preview to show the new signature
 		if (window.refreshPrintHtml) {
-			window.refreshPrintHtml().then(() => {
-				console.debug("Document preview refreshed after signing");
-			});
+			void window.refreshPrintHtml();
 		}
 
 		if (formCard && successCard) {
@@ -216,33 +231,31 @@ class EsignWebForm extends WebForm {
 		}
 	}
 
-	handle_redirect() {
+	handle_redirect(): void {
+		const success_url = this.success_url ?? "";
 		// Countdown and redirect
 		const timeSpan = document.querySelector(".esign-redirect-message .time");
 		if (!timeSpan) {
-			window.location.href = this.success_url;
+			window.location.href = success_url;
 			return;
 		}
 
 		let countdown = 5;
 		const interval = setInterval(() => {
 			countdown--;
-			timeSpan.textContent = countdown;
+			timeSpan.textContent = String(countdown);
 			if (countdown <= 0) {
 				clearInterval(interval);
-				window.location.href = this.success_url;
+				window.location.href = success_url;
 			}
 		}, 1000);
 	}
 
-	save() {
+	override save(): false {
 		// Use eSign accept endpoint if esign_enabled, otherwise use default
 		let method = this.esign_enabled
 			? "esign.esign.custom.web_form.accept"
 			: "frappe.website.doctype.web_form.web_form.accept";
-
-		// debug
-		console.debug("Using save method:", method);
 
 		let is_new = this.is_new;
 		let valid = this.validate && this.validate();
@@ -252,7 +265,7 @@ class EsignWebForm extends WebForm {
 		}
 
 		// validation hack: get_values will check for missing data
-		let doc_values = super.get_values(this.allow_incomplete);
+		let doc_values = this.get_values(Boolean(this.allow_incomplete));
 
 		if (!doc_values) return false;
 
@@ -269,7 +282,7 @@ class EsignWebForm extends WebForm {
 		window.saving = true;
 		frappe.form_dirty = false;
 
-		frappe.call({
+		frappe.call<SavedDoc>({
 			type: "POST",
 			method: method,
 			args: {
@@ -281,7 +294,7 @@ class EsignWebForm extends WebForm {
 			freeze: true,
 			callback: (response) => {
 				// Check for any exception in response
-				if (!response.exc) {
+				if (!response.exc && response.message) {
 					// Success
 					this.handle_success(response.message);
 					frappe.web_form.events.trigger("after_save");
@@ -321,7 +334,6 @@ frappe.ready(function () {
 
 	// If document is already completed/signed, don't initialize the form
 	if (frappe.is_completed) {
-		console.debug("Document already signed, skipping form initialization");
 		return;
 	}
 
@@ -379,15 +391,16 @@ frappe.ready(function () {
 		});
 	}
 
-	function setup_fields(form_doc, doc_data) {
+	function setup_fields(form_doc: WebFormDoc, doc_data: FrappeDocBase) {
 		form_doc.web_form_fields.forEach((df) => {
 			df.is_web_form = true;
-			df.read_only = df.read_only || (!form_doc.is_new && !form_doc.in_edit_mode);
+			df.read_only = df.read_only || (!form_doc.is_new && !form_doc.in_edit_mode ? 1 : 0);
 			if (df.fieldtype === "Table") {
 				df.get_data = () => {
-					let data = [];
-					if (doc_data && doc_data[df.fieldname]) {
-						return doc_data[df.fieldname];
+					let data: unknown[] = [];
+					const rows = doc_data?.[df.fieldname];
+					if (Array.isArray(rows) && rows.length) {
+						return rows;
 					}
 					return data;
 				};
@@ -408,16 +421,18 @@ frappe.ready(function () {
 				delete df.parenttype;
 				delete df.doctype;
 
-				return df;
+				return;
 			}
 			if (df.fieldtype === "Link") {
 				df.only_select = true;
 			}
 			if (["Attach", "Attach Image"].includes(df.fieldtype)) {
-				if (typeof df.options !== "object") {
-					df.options = {};
-				}
-				df.options.disable_file_browser = true;
+				// The Attach controls read an object here; frappe's own web form script does the same.
+				const options: unknown = df.options;
+				const attach_options =
+					typeof options === "object" && options !== null ? (options as Record<string, unknown>) : {};
+				attach_options.disable_file_browser = true;
+				Reflect.set(df, "options", attach_options);
 			}
 		});
 	}

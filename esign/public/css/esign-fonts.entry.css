@@ -1,0 +1,12 @@
+/* Copyright (c) 2026, Avunu LLC and contributors
+   For license information, please see license.txt */
+
+/*
+ * The signature fonts, bundled by Vite (vite.config.mjs) into one stylesheet with its font
+ * files. scripts/vite-register.mjs registers it as esign-fonts.bundle.css, the name hooks.py
+ * and the eSign web form use.
+ */
+@import "@fontsource/pacifico/index.css";
+@import "@fontsource/dancing-script/index.css";
+@import "@fontsource/great-vibes/index.css";
+@import "@fontsource/caveat/index.css";

@@ -66,6 +66,12 @@ class TestHooks(EsignDeskTestCase):
 		self.assertTrue(issubclass(get_controller("Web Form"), EsignWebForm))
 		self.assertTrue(issubclass(get_controller("Email Template"), EsignEmailTemplate))
 
+	def test_assets_are_named_as_their_bundles(self):
+		hooks = frappe.get_hooks(app_name="esign")
+		# assets.json keys a bundle by its source file name, .ts included.
+		self.assertEqual(hooks["app_include_js"], ["esign.desk.bundle.ts", "esign.control.bundle.ts"])
+		self.assertEqual(hooks["app_include_css"], ["esign.control.bundle.css", "esign-fonts.bundle.css"])
+
 	def test_jinja_and_timeline_hooks(self):
 		hooks = frappe.get_hooks(app_name="esign")
 		self.assertIn("esign.esign.custom.web_form.get_esign_link", hooks["jinja"]["methods"])

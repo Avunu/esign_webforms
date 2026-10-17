@@ -54,15 +54,7 @@
 			}
 		},
 		{
-			"files": [
-				"esign/public/js/controls/font_select.js",
-				"esign/public/js/controls/signature.js",
-				"esign/public/js/controls/upload.js",
-				"esign/public/js/controls/utils.js",
-				"esign/public/js/fonts.js",
-				"esign/public/js/web/esign_webform_script.js",
-				"esign/public/js/web_form.js"
-			],
+			"files": ["esign/public/js/web_form.js"],
 			"globals": {
 				"frappe": "readonly",
 				"__": "readonly",

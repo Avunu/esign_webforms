@@ -1,15 +1,56 @@
 // Copyright (c) 2026, Avunu LLC and contributors
 // For license information, please see license.txt
 
+import type { Dialog, Form, FrappeResponse } from "frappe-types";
+
+// oxlint-disable-next-line import/no-unassigned-import -- registers the timeline card's microtemplate
 import "./templates/esign_timeline.html";
 
-$(document).on("form-refresh", function (event, frm) {
+/** A row of esign.esign.custom.web_form.get_esign_web_forms. */
+interface EsignWebFormRow {
+	name: string;
+	title: string;
+	route: string;
+	print_format: string | null;
+}
+
+/** A MultiSelect suggestion. */
+interface ContactOption {
+	value: string;
+	label: string;
+	description: string;
+}
+
+/** What esign.esign.send_esign_email returns. */
+interface SendEsignEmailResult {
+	success: boolean;
+	message: string;
+	communication: string;
+	esign_link: string;
+}
+
+/**
+ * Optional form events another app can define on a doctype to steer the dialog: the sending
+ * Email Account and the suggested recipients.
+ */
+interface EsignFormEvents {
+	get_email_account?: (
+		frm: Form,
+		fieldname: string,
+	) => Promise<string | null | undefined> | string | null | undefined;
+	get_email_recipients?: (
+		frm: Form,
+		fieldname: string,
+	) => Promise<string[] | null | undefined> | string[] | null | undefined;
+}
+
+$(document).on("form-refresh", function (_event: JQuery.TriggeredEvent, frm: Form) {
 	frappe
-		.call("esign.esign.can_esign", {
+		.call<boolean>("esign.esign.can_esign", {
 			doctype: frm.doctype,
 			doc: frm.doc,
 		})
-		.then((r) => {
+		.then((r: FrappeResponse<boolean>) => {
 			if (r.message) {
 				const esign_dialog = new ESignDialog(frm);
 				frm.add_custom_button(__("Send for eSign"), () => {
@@ -24,16 +65,25 @@ $(document).on("form-refresh", function (event, frm) {
 });
 
 class ESignDialog {
-	constructor(frm) {
+	frm: Form;
+	web_forms: EsignWebFormRow[];
+	dialog: Dialog;
+	contact_list_cache: ContactOption[];
+
+	constructor(frm: Form) {
 		this.frm = frm;
 		this.web_forms = [];
-		this.dialog = null;
 		this.contact_list_cache = [];
-		this.init_dialog();
+		this.dialog = this.init_dialog();
 	}
 
-	init_dialog() {
-		this.dialog = new frappe.ui.Dialog({
+	/** The form's optional eSign events (see EsignFormEvents). */
+	get esign_events(): EsignFormEvents {
+		return this.frm.events as EsignFormEvents;
+	}
+
+	init_dialog(): Dialog {
+		return new frappe.ui.Dialog({
 			title: __("Send for eSign"),
 			fields: [
 				{
@@ -43,7 +93,7 @@ class ESignDialog {
 					fieldname: "email_account",
 					only_select: 1,
 					get_query: () => {
-						const filters = { enable_outgoing: 1 };
+						const filters: Record<string, unknown> = { enable_outgoing: 1 };
 						if (this.frm.doc.company) {
 							filters.company = this.frm.doc.company;
 						}
@@ -55,7 +105,7 @@ class ESignDialog {
 					fieldtype: "MultiSelect",
 					reqd: 1,
 					fieldname: "recipients",
-					get_data: (txt) => {
+					get_data: (txt?: string) => {
 						return this.get_cached_contact_list(txt);
 					},
 				},
@@ -69,7 +119,7 @@ class ESignDialog {
 					label: __("CC"),
 					fieldtype: "MultiSelect",
 					fieldname: "cc",
-					get_data: (txt) => {
+					get_data: (txt?: string) => {
 						return this.get_cached_contact_list(txt);
 					},
 				},
@@ -77,7 +127,7 @@ class ESignDialog {
 					label: __("BCC"),
 					fieldtype: "MultiSelect",
 					fieldname: "bcc",
-					get_data: (txt) => {
+					get_data: (txt?: string) => {
 						return this.get_cached_contact_list(txt);
 					},
 				},
@@ -97,7 +147,7 @@ class ESignDialog {
 					onchange: () => {
 						const template = this.dialog.get_value("email_template");
 						if (template) {
-							this.load_email_template(template);
+							this.load_email_template(String(template));
 						}
 					},
 				},
@@ -113,6 +163,7 @@ class ESignDialog {
 				},
 				{
 					fieldtype: "Section Break",
+					fieldname: "message_section",
 				},
 				{
 					label: __("Subject"),
@@ -164,15 +215,15 @@ class ESignDialog {
 		});
 	}
 
-	show() {
-		this.load_web_forms();
+	show(): void {
+		void this.load_web_forms();
 	}
 
-	async load_web_forms() {
+	async load_web_forms(): Promise<void> {
 		// Load contact list cache first
 		await this.load_contact_list_cache();
 
-		frappe.call({
+		frappe.call<EsignWebFormRow[]>({
 			method: "esign.esign.custom.web_form.get_esign_web_forms",
 			args: { doctype: this.frm.doctype },
 			callback: (r) => {
@@ -182,10 +233,10 @@ class ESignDialog {
 						label: wf.title,
 						value: wf.name,
 					}));
-					this.dialog.set_df_property("web_form", "options", [].concat(options));
-					this.dialog.set_value("web_form", options[0]?.value);
+					this.dialog.set_df_property("web_form", "options", [...options]);
+					void this.dialog.set_value("web_form", options[0]?.value);
 					this.dialog.show();
-					this.prefill_email_account();
+					void this.prefill_email_account();
 				} else {
 					frappe.msgprint(__("No eSign-enabled web forms found for {0}", [this.frm.doctype]));
 				}
@@ -193,24 +244,25 @@ class ESignDialog {
 		});
 	}
 
-	async prefill_email_account() {
+	async prefill_email_account(): Promise<void> {
 		// Try custom hook first
-		if (this.frm?.events.get_email_account) {
+		const events = this.esign_events;
+		if (events.get_email_account) {
 			try {
-				const custom_email_account = await this.frm.events.get_email_account(this.frm, "recipients");
+				const custom_email_account = await events.get_email_account(this.frm, "recipients");
 				if (custom_email_account) {
 					// Ensure proper format for MultiSelect
-					this.dialog.set_value("email_account", custom_email_account);
+					void this.dialog.set_value("email_account", custom_email_account);
 				}
 			} catch (error) {
 				console.error("Error fetching custom email accounts:", error);
 			}
 		} else {
-			const filters = { enable_outgoing: 1 };
+			const filters: Record<string, unknown> = { enable_outgoing: 1 };
 			if (this.frm.doc.company) {
 				filters.company = this.frm.doc.company;
 			}
-			frappe.call({
+			frappe.call<Array<{ name: string; default_outgoing: 0 | 1 }>>({
 				method: "frappe.client.get_list",
 				args: {
 					doctype: "Email Account",
@@ -226,31 +278,33 @@ class ESignDialog {
 					const selected = default_account || (accounts.length === 1 ? accounts[0] : null);
 
 					if (selected) {
-						this.dialog.set_value("email_account", selected.name);
+						void this.dialog.set_value("email_account", selected.name);
 					}
 				},
 			});
 		}
 	}
 
-	on_web_form_change() {
+	on_web_form_change(): void {
 		const web_form_name = this.dialog.get_value("web_form");
 		const web_form = this.web_forms.find((wf) => wf.name === web_form_name);
 
 		if (web_form && web_form.print_format) {
-			this.dialog.set_value("print_format", web_form.print_format);
+			void this.dialog.set_value("print_format", web_form.print_format);
 		}
 
 		this.update_esign_link_preview();
 	}
 
-	async load_contact_list_cache() {
-		let contacts = [];
+	async load_contact_list_cache(): Promise<void> {
+		let contacts: ContactOption[] = [];
+		const doc = this.frm.doc;
 
 		// Try custom hook first
-		if (this.frm?.events.get_email_recipients) {
+		const events = this.esign_events;
+		if (events.get_email_recipients) {
 			try {
-				const custom_contacts = await this.frm.events.get_email_recipients(this.frm, "recipients");
+				const custom_contacts = await events.get_email_recipients(this.frm, "recipients");
 				if (custom_contacts && custom_contacts.length > 0) {
 					// Ensure proper format for MultiSelect
 					contacts = custom_contacts.map((email) => ({
@@ -264,29 +318,34 @@ class ESignDialog {
 			}
 		}
 
-		// Fallback to default contact extraction if no custom contacts
+		// Fallback to default contact extraction if no custom contacts. These are fields of
+		// whichever doctype is open (Sales Order, Purchase Order, …), so they are read as strings.
+		const field = (fieldname: string): string => {
+			const value = doc[fieldname];
+			return typeof value === "string" ? value : "";
+		};
 		if (contacts.length === 0) {
-			if (this.frm.doc.customer && this.frm.doc.customer_email) {
+			if (field("customer") && field("customer_email")) {
 				contacts.push({
-					value: this.frm.doc.customer_email,
-					label: this.frm.doc.customer_email,
-					description: this.frm.doc.customer,
+					value: field("customer_email"),
+					label: field("customer_email"),
+					description: field("customer"),
 				});
 			}
 
-			if (this.frm.doc.supplier && this.frm.doc.supplier_email) {
+			if (field("supplier") && field("supplier_email")) {
 				contacts.push({
-					value: this.frm.doc.supplier_email,
-					label: this.frm.doc.supplier_email,
-					description: this.frm.doc.supplier,
+					value: field("supplier_email"),
+					label: field("supplier_email"),
+					description: field("supplier"),
 				});
 			}
 
-			if (this.frm.doc.contact_email) {
+			if (field("contact_email")) {
 				contacts.push({
-					value: this.frm.doc.contact_email,
-					label: this.frm.doc.contact_email,
-					description: this.frm.doc.contact_display || "Contact",
+					value: field("contact_email"),
+					label: field("contact_email"),
+					description: field("contact_display") || "Contact",
 				});
 			}
 		}
@@ -294,15 +353,15 @@ class ESignDialog {
 		this.contact_list_cache = contacts;
 	}
 
-	get_cached_contact_list(txt) {
+	get_cached_contact_list(txt?: string): ContactOption[] {
 		// Filter based on search text
 		return this.contact_list_cache.filter(
 			(contact) => !txt || contact.value.toLowerCase().includes(txt.toLowerCase()),
 		);
 	}
 
-	load_email_template(template_name) {
-		frappe.call({
+	load_email_template(template_name: string): void {
+		frappe.call<{ subject: string; message: string }>({
 			method: "frappe.email.doctype.email_template.email_template.get_email_template",
 			args: {
 				template_name: template_name,
@@ -310,19 +369,19 @@ class ESignDialog {
 			},
 			callback: (r) => {
 				if (r.message) {
-					this.dialog.set_value("subject", r.message.subject);
-					this.dialog.set_value("content", r.message.message);
+					void this.dialog.set_value("subject", r.message.subject);
+					void this.dialog.set_value("content", r.message.message);
 				}
 			},
 		});
 	}
 
-	update_esign_link_preview() {
+	update_esign_link_preview(): void {
 		const web_form = this.dialog.get_value("web_form");
 		const print_format = this.dialog.get_value("print_format") || "Standard";
 
 		if (web_form) {
-			frappe.call({
+			frappe.call<string>({
 				method: "esign.esign.custom.web_form.get_esign_link",
 				args: {
 					doc: this.frm.doc,
@@ -331,7 +390,11 @@ class ESignDialog {
 				},
 				callback: (r) => {
 					if (r.message) {
-						this.dialog.fields_dict.esign_link_preview.$wrapper.html(
+						const preview = this.dialog.fields_dict.esign_link_preview;
+						if (!preview || !("$wrapper" in preview)) {
+							return;
+						}
+						preview.$wrapper.html(
 							`<p><strong>eSign Link:</strong></p>
 							<div style="background: var(--control-bg); padding: 10px; border-radius: var(--border-radius); word-break: break-all;">
 								<a href="${r.message}" target="_blank">${r.message}</a>
@@ -343,8 +406,8 @@ class ESignDialog {
 		}
 	}
 
-	send_esign_request(values) {
-		frappe.call({
+	send_esign_request(values: Record<string, unknown>): void {
+		frappe.call<SendEsignEmailResult>({
 			method: "esign.esign.send_esign_email",
 			args: {
 				doctype: this.frm.doctype,
@@ -367,7 +430,7 @@ class ESignDialog {
 						message: __("eSign request sent successfully"),
 						indicator: "green",
 					});
-					this.frm.reload_doc();
+					void this.frm.reload_doc();
 				}
 			},
 		});
