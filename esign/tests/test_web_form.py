@@ -215,6 +215,7 @@ class TestSigningPage(EsignTestCase):
 
 		self.assertIn("esign-layout", content)
 		self.assertIn(f'key: "{self.key}"', content)
+		self.assertIn(f'web_form: "{self.web_form_name}"', content)
 		self.assertIn('print_format: "Standard"', content)
 		self.assertIn("signer@example.com", content)
 		self.assertIn("esign.web.bundle.js", content)
@@ -255,6 +256,7 @@ class TestSigningPage(EsignTestCase):
 		self.assertIn("esign-completed", content)
 		self.assertIn("esign.esign.custom.web_form.download_signed_pdf", content)
 		self.assertIn(f"docname={self.doc.name}", content)
+		self.assertIn(f"web_form={self.web_form_name}", content)
 
 	def test_force_mobile_adds_a_qr_code(self):
 		self.web_form.db_set("esign_force_mobile", 1)
@@ -332,6 +334,41 @@ class TestPrintHtml(EsignTestCase):
 		result = get_print_html(TEST_DOCTYPE, self.doc.name)
 		self.assertIn("Service agreement", result["print_html"])
 
+	def test_owner_without_key_gets_the_print_html_through_the_web_form(self):
+		# The keyless owner the signing page admits must also get its preview.
+		self.doc.db_set("owner", OUTSIDER)
+		frappe.set_user(OUTSIDER)
+		result = get_print_html(TEST_DOCTYPE, self.doc.name, web_form=self.web_form_name)
+		self.assertIn("Service agreement", result["print_html"])
+
+		# Without the web form, the owner has no print permission.
+		frappe.flags.ignore_print_permissions = False
+		with self.assertRaises(frappe.PermissionError):
+			get_print_html(TEST_DOCTYPE, self.doc.name)
+
+	def test_web_form_does_not_admit_other_users(self):
+		frappe.set_user(OUTSIDER)
+		with self.assertRaises(frappe.PermissionError):
+			get_print_html(TEST_DOCTYPE, self.doc.name, web_form=self.web_form_name)
+
+	def test_only_an_esign_web_form_for_the_doctype_admits(self):
+		self.doc.db_set("owner", OUTSIDER)
+		frappe.set_user(OUTSIDER)
+		with self.assertRaises(frappe.PermissionError):
+			get_print_html(TEST_DOCTYPE, self.doc.name, web_form="no-such-web-form")
+
+		frappe.set_user("Administrator")
+		self.web_form.db_set("esign_enabled", 0)
+		frappe.clear_document_cache("Web Form", self.web_form_name)
+		frappe.set_user(OUTSIDER)
+		with self.assertRaises(frappe.PermissionError):
+			get_print_html(TEST_DOCTYPE, self.doc.name, web_form=self.web_form_name)
+
+	def test_guest_gets_nothing_from_the_web_form(self):
+		frappe.set_user("Guest")
+		with self.assertRaises(frappe.PermissionError):
+			get_print_html(TEST_DOCTYPE, self.doc.name, web_form=self.web_form_name)
+
 
 class TestDownloadSignedPdf(EsignTestCase):
 	def attach_signed_pdf(self, **kwargs: Any):
@@ -363,6 +400,23 @@ class TestDownloadSignedPdf(EsignTestCase):
 		with signing_request(method="GET"):
 			download_signed_pdf(TEST_DOCTYPE, self.doc.name)
 		self.assertEqual(frappe.local.response["type"], "redirect")
+
+	def test_owner_without_key_downloads_through_the_web_form(self):
+		file = self.attach_signed_pdf(is_private=0)
+		self.doc.db_set("owner", OUTSIDER)
+		frappe.set_user(OUTSIDER)
+		with signing_request(method="GET"), self.assertRaises(frappe.PermissionError):
+			download_signed_pdf(TEST_DOCTYPE, self.doc.name)
+		with signing_request(method="GET"):
+			download_signed_pdf(TEST_DOCTYPE, self.doc.name, web_form=self.web_form_name)
+		self.assertEqual(frappe.local.response["type"], "redirect")
+		self.assertEqual(frappe.local.response["location"], file.file_url)
+
+	def test_guest_needs_a_key_even_with_the_web_form(self):
+		self.attach_signed_pdf()
+		frappe.set_user("Guest")
+		with signing_request(method="GET"), self.assertRaises(frappe.PermissionError):
+			download_signed_pdf(TEST_DOCTYPE, self.doc.name, web_form=self.web_form_name)
 
 	def test_no_signed_pdf(self):
 		with signing_request(method="GET"), self.assertRaises(frappe.DoesNotExistError):

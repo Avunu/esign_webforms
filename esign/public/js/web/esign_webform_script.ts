@@ -107,6 +107,7 @@ function loadPrintHtml(): Promise<void> {
 				docname: ctx.name,
 				print_format: ctx.print_format || "standard",
 				key: ctx.key || "",
+				web_form: ctx.web_form || "",
 			},
 			freeze: false,
 		}),

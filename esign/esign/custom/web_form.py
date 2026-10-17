@@ -237,9 +237,9 @@ class EsignWebForm(BaseWebForm):
 		# only marked permission-free afterwards: frappe's website permission check (part of
 		# the fallback) passes any document that already carries ignore_permissions. Without a
 		# key, the web form's own rules (owner, website permission, document permissions) also
-		# let a user in, as in frappe's web form and in accept.
-		if key or not BaseWebForm.has_web_form_permission(self, self.doc_type, cur_doc_name, "read"):
-			validate_esign_key(key, doc)
+		# let a user in, as in frappe's web form and in accept; the preview and the signed-PDF
+		# download apply the same rule through the web form name the page passes them.
+		validate_esign_access(key, doc, self)
 		doc.flags.ignore_permissions = True
 
 		# Allow public access to the web form if validation passes
@@ -279,6 +279,7 @@ class EsignWebForm(BaseWebForm):
 		super().add_custom_context_and_script(context)
 
 		context.key = key  # Pass key to frontend for async API calls
+		context.esign_web_form = self.name  # Lets the async calls apply the keyless web form rules
 		context.printview_url = (
 			"/api/method/frappe.utils.print_format.download_pdf?"
 			f"doctype={self.doc_type}&name={cur_doc_name}&format={print_format}&key={key}"
@@ -311,7 +312,14 @@ class EsignWebForm(BaseWebForm):
 				# Build the download URL through our key-validated endpoint
 				from urllib.parse import urlencode
 
-				params = urlencode({"doctype": self.doc_type, "docname": cur_doc_name, "key": key})
+				params = urlencode(
+					{
+						"doctype": self.doc_type,
+						"docname": cur_doc_name,
+						"key": key,
+						"web_form": self.name,
+					}
+				)
 				context.signed_pdf_url = (
 					f"/api/method/esign.esign.custom.web_form.download_signed_pdf?{params}"
 				)
@@ -349,6 +357,42 @@ class EsignWebForm(BaseWebForm):
 
 		# Fall back to parent method
 		return super().has_web_form_permission(doctype, name, ptype)
+
+
+def validate_esign_access(
+	key: str, doc: Document, web_form: EsignWebForm | str | None = None, require_key: bool = False
+) -> bool:
+	"""Validate access to an eSign document for the signing page and its endpoints.
+
+	A key is checked as the share key. Without one, a logged-in user the eSign web form's own
+	rules admit (owner, website permission, document permissions) is let in, so the page, its
+	preview and its signed-PDF download agree; anyone else falls back to validate_esign_key.
+
+	Args:
+		key: The share key, or an empty string
+		doc: The document being accessed
+		web_form: The eSign web form (or its name) the request comes from, if any
+		require_key: Passed on to validate_esign_key when the web form rules do not admit
+
+	Raises:
+		frappe.PermissionError: If access is not granted
+	"""
+	if not key and web_form and frappe.session.user != "Guest":
+		wf = _get_esign_web_form(web_form, doc.doctype)
+		if wf and BaseWebForm.has_web_form_permission(wf, doc.doctype, str(doc.name), "read"):
+			return True
+	return validate_esign_key(key, doc, require_key=require_key)
+
+
+def _get_esign_web_form(web_form: EsignWebForm | str, doctype: str) -> EsignWebForm | None:
+	"""The eSign-enabled web form for doctype, or None if web_form is not one."""
+	if isinstance(web_form, str):
+		if not frappe.db.exists("Web Form", web_form):
+			return None
+		web_form = cast(EsignWebForm, frappe.get_cached_doc("Web Form", web_form))
+	if not web_form.get("esign_enabled") or web_form.get("doc_type") != doctype:
+		return None
+	return web_form
 
 
 _UNSET = object()
@@ -801,7 +845,7 @@ def get_esign_link(
 @frappe.whitelist(allow_guest=True)
 @rate_limit(key="web_form", limit=30, seconds=60)
 def get_print_html(
-	doctype: str, docname: str, print_format: str = "standard", key: str = ""
+	doctype: str, docname: str, print_format: str = "standard", key: str = "", web_form: str = ""
 ) -> PrintHtmlResponse:
 	"""Get the print HTML and styles for a document.
 
@@ -812,6 +856,9 @@ def get_print_html(
 		doctype: The DocType of the document
 		docname: The name of the document
 		print_format: The print format to use (default: "standard")
+		key: The document share key, if any
+		web_form: The eSign web form the page belongs to; without a key, its rules can admit
+			the user (see validate_esign_access)
 
 	Returns:
 		PrintHtmlResponse with print_html and print_style
@@ -834,7 +881,7 @@ def get_print_html(
 	# before the document or the request is marked permission-free: without a key, the
 	# fallback is the standard print permission check, which ignore_print_permissions turns
 	# off and which passes a document that carries ignore_permissions.
-	validate_esign_key(key, doc)
+	validate_esign_access(key, doc, web_form)
 	doc.flags.ignore_permissions = True
 
 	# Access is granted: skip the renderer's own permission checks, which would only add
@@ -874,7 +921,7 @@ def get_print_html(
 
 @frappe.whitelist(allow_guest=True)
 @rate_limit(key="esign_download", limit=20, seconds=60)
-def download_signed_pdf(doctype: str, docname: str, key: str = ""):
+def download_signed_pdf(doctype: str, docname: str, key: str = "", web_form: str = ""):
 	"""Download a signed PDF attachment with key-based access validation.
 
 	This endpoint allows Guest users to download private signed PDF files
@@ -884,6 +931,8 @@ def download_signed_pdf(doctype: str, docname: str, key: str = ""):
 		doctype: The DocType of the document
 		docname: The name of the document
 		key: The document share key for access validation
+		web_form: The eSign web form the page belongs to; without a key, its rules can admit
+			a logged-in user (see validate_esign_access)
 
 	Returns:
 		The PDF file response
@@ -895,8 +944,9 @@ def download_signed_pdf(doctype: str, docname: str, key: str = ""):
 	doc = frappe.get_doc(doctype, docname)
 
 	# Validate access via share key - require key for guest access. Without a key a user
-	# needs print permission, which a document marked ignore_permissions would skip.
-	validate_esign_key(key, doc, require_key=(frappe.session.user == "Guest"))
+	# needs the web form's permission or print permission, which a document marked
+	# ignore_permissions would skip.
+	validate_esign_access(key, doc, web_form, require_key=(frappe.session.user == "Guest"))
 
 	# Find the signed PDF for this document
 	# First try to find an eSign Communication for this document

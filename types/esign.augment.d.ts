@@ -11,6 +11,7 @@ interface EsignContext {
 	doctype: string;
 	name: string;
 	key: string;
+	web_form: string;
 	print_format: string;
 	signed_pdf_url: string;
 }
