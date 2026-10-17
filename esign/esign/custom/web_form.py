@@ -1195,14 +1195,14 @@ def accept(web_form: str, data: str):
 	"""
 	from frappe.website.doctype.web_form.web_form import accept as base_accept
 
-	data = frappe._dict(json.loads(data))
+	form = frappe._dict(json.loads(data))
 
 	# Check if this is an eSign-enabled web form
 	wf = cast(EsignWebForm, frappe.get_lazy_doc("Web Form", web_form))
 
 	# If not eSign-enabled, use the base accept function
 	if not getattr(wf, "esign_enabled", False):
-		return base_accept(web_form, json.dumps(data))
+		return base_accept(web_form, json.dumps(form))
 
 	# For eSign forms, we need to handle permissions specially
 	doctype = wf.doc_type
@@ -1213,10 +1213,10 @@ def accept(web_form: str, data: str):
 		frappe.form_dict.key = extract_param_from_referrer("key")
 
 	# Validate the key if we have one and this is an update
-	if data.name and frappe.form_dict.get("key"):
+	if form.name and frappe.form_dict.get("key"):
 		try:
 			# Validate the key gives us access to this document
-			doc = frappe.get_doc(doctype, data.name)
+			doc = frappe.get_doc(doctype, form.name)
 			validate_print_permission(doc)
 		except frappe.PermissionError, frappe.exceptions.LinkExpired:
 			frappe.throw(_("Invalid or expired access key"), frappe.PermissionError)
@@ -1226,9 +1226,9 @@ def accept(web_form: str, data: str):
 	# saving with permission checks on). Otherwise anyone who knows a document name could
 	# overwrite its form fields.
 	if (
-		data.name
-		and not wf.has_web_form_permission(doctype, data.name, "write")
-		and not frappe.has_permission(doctype, "write", data.name)
+		form.name
+		and not wf.has_web_form_permission(doctype, form.name, "write")
+		and not frappe.has_permission(doctype, "write", form.name)
 	):
 		frappe.throw(_("You are not permitted to update this document"), frappe.PermissionError)
 
@@ -1240,15 +1240,15 @@ def accept(web_form: str, data: str):
 		frappe.session.user = "Guest"
 
 	try:
-		if data.name and not wf.allow_edit:
+		if form.name and not wf.allow_edit:
 			frappe.throw(_("You are not allowed to update this Web Form Document"))
 
 		frappe.flags.in_web_form = True
 		meta = frappe.get_meta(doctype)
 
-		is_new = not data.name
+		is_new = not form.name
 		# For eSign forms, always get doc with ignore_permissions since we validated the key
-		doc = frappe.get_doc(doctype, data.name) if data.name else frappe.new_doc(doctype)
+		doc = frappe.get_doc(doctype, form.name) if form.name else frappe.new_doc(doctype)
 
 		# Set ignore_mandatory flag if allow_incomplete is enabled
 		if wf.allow_incomplete:
@@ -1263,7 +1263,7 @@ def accept(web_form: str, data: str):
 		for field in wf.web_form_fields:
 			fieldname = _fieldname(field)
 			df = meta.get_field(fieldname)
-			value = data.get(fieldname, "")
+			value = form.get(fieldname, "")
 
 			if df and df.fieldtype in ("Attach", "Attach Image"):
 				if value and "data:" in value and "base64" in value:
