@@ -2,7 +2,8 @@
 // For license information, please see license.txt
 
 import SignaturePad from "signature_pad";
-import { createIconHast, toDom } from "./utils";
+import { ControlData } from "./base";
+import { createIconHast, toDom, type HastElement } from "./utils";
 
 /**
  * @fileoverview Signature control for Frappe Framework
@@ -25,11 +26,19 @@ import { createIconHast, toDom } from "./utils";
  * @author Avunu LLC
  */
 
+/** A typed-signature font: its value, its label and the CSS font-family to draw it with. */
+export interface SignatureFont {
+	value: string;
+	label: string;
+	fontFamily: string;
+}
+
+type SignatureMode = "draw" | "type" | "upload";
+
 /**
  * Bundled signature fonts from @fontsource - always available
- * @type {Array<{value: string, label: string, fontFamily: string}>}
  */
-const SIGNATURE_FONTS = [
+const SIGNATURE_FONTS: readonly [SignatureFont, ...SignatureFont[]] = [
 	{
 		value: "Pacifico",
 		label: "Pacifico",
@@ -63,17 +72,44 @@ let signatureCounter = 0;
  * @description A signature field control with draw, type, and upload modes.
  * Uses modern web APIs (Popover, CSS Anchor Positioning) and HAST for DOM.
  */
-export class ControlSignature extends frappe.ui.form.ControlData {
+export class ControlSignature extends ControlData {
+	// Assigned in make_input (by toDom refs for the elements), which frappe's control
+	// constructor calls: `declare` keeps the class from re-initialising them afterwards.
+	declare _id: number;
+	declare _current_mode: SignatureMode;
+	declare _font_options: SignatureFont[];
+	declare _selected_font: string | null;
+	declare _font_option_buttons: HTMLElement[];
+	declare _upload_data: string | null;
+	declare _theme_observer: MutationObserver | undefined;
+	declare signature_pad: SignaturePad | undefined;
+	declare mode_buttons: HTMLElement[];
+	declare mode_sections: HTMLElement[];
+	declare display_wrapper: HTMLDivElement;
+	declare display_canvas: HTMLCanvasElement;
+	declare display_overlay: HTMLDivElement;
+	declare dialog: HTMLDivElement;
+	declare pad_canvas: HTMLCanvasElement;
+	declare typed_input: HTMLInputElement;
+	declare font_value_display: HTMLSpanElement;
+	declare font_popover: HTMLDivElement;
+	declare typed_preview_text: HTMLDivElement;
+	declare upload_area: HTMLDivElement;
+	declare file_input: HTMLInputElement;
+	declare upload_prompt: HTMLDivElement;
+	declare upload_preview: HTMLDivElement;
+	declare upload_img: HTMLImageElement;
+
 	/**
 	 * Gets the term to use for "signature" from df.options.
 	 * Defaults to "Signature" if not specified.
-	 * @returns {string}
 	 */
-	get_signature_term() {
-		return this.df.options?.trim() || "Signature";
+	get_signature_term(): string {
+		const options = this.df.options;
+		return (typeof options === "string" ? options.trim() : "") || "Signature";
 	}
 
-	make_input() {
+	override make_input(): void {
 		if (this.has_input) return;
 
 		this._id = ++signatureCounter;
@@ -94,14 +130,14 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 	/**
 	 * Builds the signature display area with canvas and overlay
 	 */
-	build_display_area() {
+	build_display_area(): void {
 		const term = this.get_signature_term().toLowerCase();
 		const addText = __("Add your {0}", [term]);
 		const replaceText = __("Replace {0}", [term]);
 		const addIcon = createIconHast("es-line-add", "md");
 		const replaceIcon = createIconHast("es-line-edit", "md");
 
-		const displayStructure = {
+		const displayStructure: HastElement = {
 			type: "element",
 			tagName: "div",
 			properties: { className: ["signature-display"] },
@@ -183,7 +219,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 	/**
 	 * Builds the signature dialog as a popover element
 	 */
-	build_dialog_popover() {
+	build_dialog_popover(): void {
 		const term = this.get_signature_term();
 		const termLower = term.toLowerCase();
 		const popoverId = `signature-dialog-${this._id}`;
@@ -193,7 +229,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 		this.mode_buttons = [];
 		this.mode_sections = [];
 
-		const dialogStructure = {
+		const dialogStructure: HastElement = {
 			type: "element",
 			tagName: "div",
 			properties: {
@@ -203,13 +239,13 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 			},
 			ref: "dialog",
 			data: {
-				onclick: (e) => {
+				onclick: (e: MouseEvent) => {
 					// Close on backdrop click
 					if (e.target === this.dialog) {
 						this.hide_dialog();
 					}
 				},
-				onkeydown: (e) => {
+				onkeydown: (e: KeyboardEvent) => {
 					if (e.key === "Escape") {
 						this.hide_dialog();
 					}
@@ -269,7 +305,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 										dataMode: "draw",
 									},
 									data: {
-										constructor: (el) => this.mode_buttons.push(el),
+										constructor: (el: HTMLElement) => this.mode_buttons.push(el),
 										onclick: () => this.select_mode("draw"),
 									},
 									children: [{ type: "text", value: __("Draw") }],
@@ -283,7 +319,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 										dataMode: "type",
 									},
 									data: {
-										constructor: (el) => this.mode_buttons.push(el),
+										constructor: (el: HTMLElement) => this.mode_buttons.push(el),
 										onclick: () => this.select_mode("type"),
 									},
 									children: [{ type: "text", value: __("Type") }],
@@ -297,7 +333,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 										dataMode: "upload",
 									},
 									data: {
-										constructor: (el) => this.mode_buttons.push(el),
+										constructor: (el: HTMLElement) => this.mode_buttons.push(el),
 										onclick: () => this.select_mode("upload"),
 									},
 									children: [{ type: "text", value: __("Upload") }],
@@ -321,7 +357,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 										dataSection: "draw",
 									},
 									data: {
-										constructor: (el) => this.mode_sections.push(el),
+										constructor: (el: HTMLElement) => this.mode_sections.push(el),
 									},
 									children: [
 										{
@@ -387,7 +423,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 										dataSection: "type",
 									},
 									data: {
-										constructor: (el) => this.mode_sections.push(el),
+										constructor: (el: HTMLElement) => this.mode_sections.push(el),
 									},
 									children: [
 										{
@@ -511,7 +547,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 										dataSection: "upload",
 									},
 									data: {
-										constructor: (el) => this.mode_sections.push(el),
+										constructor: (el: HTMLElement) => this.mode_sections.push(el),
 									},
 									children: [
 										{
@@ -522,22 +558,22 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 											},
 											ref: "upload_area",
 											data: {
-												onclick: (e) => {
+												onclick: (e: MouseEvent) => {
 													if (e.target !== this.file_input) {
 														this.file_input.click();
 													}
 												},
-												ondragover: (e) => {
+												ondragover: (e: DragEvent) => {
 													e.preventDefault();
 													this.upload_area.classList.add("drag-over");
 												},
 												ondragleave: () => {
 													this.upload_area.classList.remove("drag-over");
 												},
-												ondrop: (e) => {
+												ondrop: (e: DragEvent) => {
 													e.preventDefault();
 													this.upload_area.classList.remove("drag-over");
-													const file = e.dataTransfer.files[0];
+													const file = e.dataTransfer?.files[0];
 													if (file && file.type.startsWith("image/")) {
 														this.process_uploaded_file(file);
 													}
@@ -549,12 +585,12 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 													tagName: "input",
 													properties: {
 														type: "file",
-														accept: "image/*",
+														accept: ["image/*"],
 														className: ["signature-file-input"],
 													},
 													ref: "file_input",
 													data: {
-														onchange: (e) => this.handle_file_select(e),
+														onchange: (e: Event) => this.handle_file_select(e),
 													},
 													children: [],
 												},
@@ -650,13 +686,14 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 	/**
 	 * Shows the signature dialog
 	 */
-	show_dialog() {
+	show_dialog(): void {
 		// Initialize font options if not already done (bundled fonts are always available)
 		if (this._font_options.length === 0) {
-			this._font_options = SIGNATURE_FONTS;
+			this._font_options = [...SIGNATURE_FONTS];
 			this.build_font_options();
-			if (this._font_options.length > 0) {
-				this.select_font(this._font_options[0].value);
+			const first = this._font_options[0];
+			if (first) {
+				this.select_font(first.value);
 			}
 		}
 
@@ -679,15 +716,15 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 	/**
 	 * Hides the signature dialog
 	 */
-	hide_dialog() {
+	hide_dialog(): void {
 		this.dialog.hidePopover();
 	}
 
 	/**
 	 * Selects a signature mode (draw, type, upload)
-	 * @param {string} mode - The mode to select
+	 * @param mode - The mode to select
 	 */
-	select_mode(mode) {
+	select_mode(mode: SignatureMode): void {
 		this._current_mode = mode;
 
 		// Update button states
@@ -709,7 +746,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 	/**
 	 * Initializes the signature pad on the draw canvas
 	 */
-	init_signature_pad() {
+	init_signature_pad(): void {
 		if (!this.pad_canvas) return;
 
 		// Resize canvas to match CSS size
@@ -728,7 +765,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 	/**
 	 * Resizes the pad canvas to match CSS dimensions and device pixel ratio
 	 */
-	resize_pad_canvas() {
+	resize_pad_canvas(): void {
 		const ratio = Math.max(window.devicePixelRatio || 1, 1);
 		const rect = this.pad_canvas.getBoundingClientRect();
 
@@ -737,7 +774,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 		if (this.pad_canvas.width !== rect.width * ratio || this.pad_canvas.height !== rect.height * ratio) {
 			this.pad_canvas.width = rect.width * ratio;
 			this.pad_canvas.height = rect.height * ratio;
-			this.pad_canvas.getContext("2d").scale(ratio, ratio);
+			this.pad_canvas.getContext("2d")?.scale(ratio, ratio);
 
 			if (this.signature_pad) {
 				this.signature_pad.clear();
@@ -748,15 +785,15 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 	/**
 	 * Builds font option buttons in the font popover
 	 */
-	build_font_options() {
+	build_font_options(): void {
 		// Track font option buttons for select state updates
 		this._font_option_buttons = [];
 
-		const optionsStructure = {
+		const optionsStructure: HastElement = {
 			type: "element",
 			tagName: "div",
 			properties: { className: ["signature-font-options"] },
-			children: this._font_options.map((opt) => ({
+			children: this._font_options.map((opt): HastElement => ({
 				type: "element",
 				tagName: "button",
 				properties: {
@@ -765,7 +802,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 					dataValue: opt.value,
 				},
 				data: {
-					constructor: (el) => {
+					constructor: (el: HTMLElement) => {
 						this._font_option_buttons.push(el);
 						el.style.fontFamily = opt.fontFamily;
 					},
@@ -784,9 +821,9 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 
 	/**
 	 * Selects a font for typed signatures
-	 * @param {string} value - The font value to select
+	 * @param value - The font value to select
 	 */
-	select_font(value) {
+	select_font(value: string): void {
 		this._selected_font = value;
 		const option = this._font_options.find((o) => o.value === value);
 
@@ -808,7 +845,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 	/**
 	 * Updates the typed signature preview
 	 */
-	update_typed_preview() {
+	update_typed_preview(): void {
 		const text = this.typed_input.value || "";
 		const option = this._font_options.find((o) => o.value === this._selected_font);
 		const fontFamily = option?.fontFamily || SIGNATURE_FONTS[0].fontFamily;
@@ -819,10 +856,10 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 
 	/**
 	 * Handles file selection from input
-	 * @param {Event} e - The change event
+	 * @param e - The change event
 	 */
-	handle_file_select(e) {
-		const file = e.target.files[0];
+	handle_file_select(e: Event): void {
+		const file = (e.target as HTMLInputElement).files?.[0];
 		if (file) {
 			this.process_uploaded_file(file);
 		}
@@ -830,13 +867,14 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 
 	/**
 	 * Processes an uploaded file and shows preview
-	 * @param {File} file - The uploaded file
+	 * @param file - The uploaded file
 	 */
-	process_uploaded_file(file) {
+	process_uploaded_file(file: File): void {
 		const reader = new FileReader();
-		reader.addEventListener("load", (e) => {
-			this._upload_data = e.target.result;
-			this.upload_img.src = this._upload_data;
+		reader.addEventListener("load", () => {
+			const data = reader.result as string;
+			this._upload_data = data;
+			this.upload_img.src = data;
 			this.upload_preview.classList.add("active");
 			this.upload_prompt.classList.add("hidden");
 		});
@@ -846,7 +884,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 	/**
 	 * Handles the insert button click
 	 */
-	handle_insert() {
+	handle_insert(): void {
 		const term = this.get_signature_term().toLowerCase();
 
 		if (this._current_mode === "draw") {
@@ -878,7 +916,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 				});
 				return;
 			}
-			this.normalize_upload_to_canvas(this._upload_data).then((data) => {
+			void this.normalize_upload_to_canvas(this._upload_data).then((data) => {
 				this.set_signature_value(data);
 			});
 			return; // Don't hide yet, wait for promise
@@ -889,10 +927,10 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 
 	/**
 	 * Converts typed text to base64 PNG
-	 * @param {string} text - The text to convert
-	 * @returns {string} Base64 data URL
+	 * @param text - The text to convert
+	 * @returns Base64 data URL
 	 */
-	convert_typed_to_base64(text) {
+	convert_typed_to_base64(text: string): string {
 		const option = this._font_options.find((o) => o.value === this._selected_font);
 		const fontFamily = option?.fontFamily || SIGNATURE_FONTS[0].fontFamily;
 
@@ -900,6 +938,9 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 		canvas.width = 750;
 		canvas.height = 292;
 		const ctx = canvas.getContext("2d");
+		if (!ctx) {
+			return canvas.toDataURL("image/png");
+		}
 
 		ctx.fillStyle = "transparent";
 		ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -933,15 +974,19 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 
 	/**
 	 * Normalizes an uploaded image to a consistent canvas size
-	 * @param {string} dataUrl - The uploaded image data URL
-	 * @returns {Promise<string>} Normalized base64 data URL
+	 * @param dataUrl - The uploaded image data URL
+	 * @returns Normalized base64 data URL
 	 */
-	normalize_upload_to_canvas(dataUrl) {
+	normalize_upload_to_canvas(dataUrl: string): Promise<string> {
 		return new Promise((resolve, reject) => {
 			const canvas = document.createElement("canvas");
 			canvas.width = 750;
 			canvas.height = 292;
 			const ctx = canvas.getContext("2d");
+			if (!ctx) {
+				reject(new Error("Canvas 2D is not available"));
+				return;
+			}
 
 			ctx.fillStyle = "transparent";
 			ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -978,11 +1023,11 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 
 	/**
 	 * Sets the signature value and updates the display
-	 * @param {string} data - Base64 signature data
+	 * @param data - Base64 signature data
 	 */
-	set_signature_value(data) {
+	set_signature_value(data: string): void {
 		this.value = data;
-		this.set_value(data);
+		void this.set_value(data);
 		this.render_display();
 		this.hide_dialog();
 
@@ -997,7 +1042,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 	 * Canvas 2D can't parse `var(--x)`, so we read the resolved color off a
 	 * hidden probe element — reading `color` guarantees a concrete rgb() value.
 	 */
-	resolve_css_color(var_name, fallback = "#d1d8dd") {
+	resolve_css_color(var_name: string, fallback = "#d1d8dd"): string {
 		const probe = document.createElement("span");
 		probe.style.color = `var(${var_name}, ${fallback})`;
 		probe.style.display = "none";
@@ -1011,7 +1056,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 	 * Re-renders the empty-state placeholder when the desk theme changes so its
 	 * border tracks the active theme. Set up once per control instance.
 	 */
-	setup_theme_observer() {
+	setup_theme_observer(): void {
 		if (this._theme_observer) return;
 		this._theme_observer = new MutationObserver(() => {
 			if (!this.get_value()) this.render_display();
@@ -1025,15 +1070,16 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 	/**
 	 * Renders the signature on the display canvas
 	 */
-	render_display() {
+	render_display(): void {
 		if (!this.display_canvas) return;
 		this.setup_theme_observer();
 
 		const ctx = this.display_canvas.getContext("2d");
+		if (!ctx) return;
 		ctx.clearRect(0, 0, this.display_canvas.width, this.display_canvas.height);
 
 		const value = this.get_value();
-		if (value) {
+		if (typeof value === "string" && value) {
 			const img = new Image();
 			img.addEventListener("load", () => {
 				ctx.drawImage(img, 0, 0, this.display_canvas.width, this.display_canvas.height);
@@ -1049,8 +1095,9 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 	/**
 	 * Renders the empty state on the display canvas
 	 */
-	render_empty_display() {
+	render_empty_display(): void {
 		const ctx = this.display_canvas.getContext("2d");
+		if (!ctx) return;
 		ctx.clearRect(0, 0, this.display_canvas.width, this.display_canvas.height);
 
 		ctx.setLineDash([5, 5]);
@@ -1065,16 +1112,16 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 	// Base class interface methods
 	// ─────────────────────────────────────────────────────────────────
 
-	set_input(value) {
+	override set_input(value: unknown): void {
 		this.value = value;
 		this.render_display();
 	}
 
-	get_input_value() {
+	override get_input_value(): unknown {
 		return this.value;
 	}
 
-	get_value() {
+	override get_value(): unknown {
 		const value = this.value || this.get_model_value();
 		// Ignore placeholder image
 		if (value === "/assets/frappe/images/signature-placeholder.png") {
@@ -1083,11 +1130,11 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 		return value;
 	}
 
-	set_formatted_input(value) {
+	override set_formatted_input(value: unknown): void {
 		this.set_input(value);
 	}
 
-	refresh_input() {
+	override refresh_input(): void {
 		// Call base class to handle label, description, mandatory styling, etc.
 		super.refresh_input();
 

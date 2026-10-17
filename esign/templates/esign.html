@@ -18,6 +18,7 @@
 		doctype: {{ doctype | tojson }},
 		name: {{ name | tojson }},
 		key: {{ key | tojson }},
+		web_form: {{ esign_web_form | tojson }},
 		print_format: {{ print_format | tojson }},
 		signed_pdf_url: {{ signed_pdf_url | default('') | tojson }}
 	};

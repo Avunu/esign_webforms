@@ -1,17 +1,6 @@
 // Copyright (c) 2026, Avunu LLC and contributors
 // For license information, please see license.txt
 
-/**
- * eSign Control Bundle (Desk)
- *
- * This bundle is loaded via app_include_js and runs on the desk/backend.
- * At this point frappe.ui.form is guaranteed to be available, so no polling needed.
- */
-import { ControlUpload } from "./controls/upload";
-import { ControlSignature } from "./controls/signature";
-import { ControlFontSelect } from "./controls/font_select";
-
-// Override frappe's built-in controls with our enhanced versions
-frappe.ui.form.ControlUpload = ControlUpload;
-frappe.ui.form.ControlSignature = ControlSignature;
-frappe.ui.form.ControlFontSelect = ControlFontSelect;
+// The esbuild entry point, kept as .js so assets.json names the bundle "esign.control.bundle.js" both
+// in a normal build and in `bench build --using-cached`, which keys by the built file's name.
+import "./esign_controls.ts";

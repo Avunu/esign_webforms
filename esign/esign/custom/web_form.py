@@ -4,8 +4,10 @@
 import hashlib
 import json
 import uuid
+from collections.abc import Generator
+from contextlib import contextmanager
 from datetime import datetime
-from typing import TYPE_CHECKING, TypedDict, cast
+from typing import TypedDict, cast
 
 import frappe
 from frappe import _
@@ -19,7 +21,7 @@ from frappe.model.document import Document
 from frappe.rate_limiter import rate_limit
 from frappe.twofactor import get_qr_svg_code
 from frappe.types import DF
-from frappe.utils import cint, get_frappe_version, now
+from frappe.utils import cint, escape_html, get_frappe_version, now, validate_email_address
 from frappe.website.doctype.web_form.web_form import WebForm as BaseWebForm
 from frappe.www.printview import validate_print_permission
 
@@ -60,34 +62,6 @@ def validate_esign_key(key: str, doc: Document, require_key: bool = False) -> bo
 	# No key provided - fall back to standard permission check
 	validate_print_permission(doc)
 	return True
-
-
-FRAPPE_MAJOR = int(frappe.__version__.split(".")[0])
-
-# Choose the base class for EsignWebForm.
-#
-# Frappe v16+ registers this class via `extend_doctype_class` (see hooks.py) and composes
-# the final controller as `type(..., (*extensions_in_reverse_install_order, WebForm))`.
-# The payments app registers its PaymentWebForm the same way, so its behaviour is still
-# mixed into the final class. If we also inherited from PaymentWebForm here, installing
-# esign before payments would produce bases (PaymentWebForm, EsignWebForm, WebForm),
-# which has no consistent MRO and breaks loading every Web Form. So on v16+ we only
-# subclass the stock WebForm.
-#
-# Frappe v15 uses `override_doctype_class`, where the last app wins; there we keep
-# inheriting from PaymentWebForm (when installed) so payment behaviour isn't lost.
-if TYPE_CHECKING or FRAPPE_MAJOR >= 16:
-	_EsignWebFormBase = BaseWebForm
-else:
-	try:
-		from payments.overrides.payment_webform import PaymentWebForm  # type: ignore
-	except ImportError:
-		# Dummy mixin when payments isn't installed
-		class PaymentWebForm:
-			pass
-
-	class _EsignWebFormBase(PaymentWebForm, BaseWebForm):
-		pass
 
 
 class RequestData(TypedDict):
@@ -132,6 +106,16 @@ def extract_param_from_referrer(param: str = "") -> str:
 		return ""
 
 
+def _fieldname(row: Document) -> str | None:
+	"""A web form row's fieldname.
+
+	Frappe declares WebFormField.fieldname (and Notification.set_property_after_alert) as
+	`Literal[None]`, its type for a Select whose options are only filled in at runtime, so
+	the value is read through `get`, which is untyped.
+	"""
+	return row.get("fieldname")
+
+
 def _find_email_fieldname(wf: EsignWebForm) -> str | None:
 	"""Find the fieldname of a Data field with Options='Email' on the web form.
 
@@ -142,20 +126,28 @@ def _find_email_fieldname(wf: EsignWebForm) -> str | None:
 	"""
 	meta = frappe.get_meta(wf.doc_type)
 	for field in wf.web_form_fields:
-		if field.fieldtype == "Data" and field.fieldname:
-			df = meta.get_field(field.fieldname)
+		fieldname = _fieldname(field)
+		if field.fieldtype == "Data" and fieldname:
+			df = meta.get_field(fieldname)
 			if df and df.fieldtype == "Data" and (df.options or "").strip().lower() == "email":
-				return field.fieldname
+				return fieldname
 	return None
 
 
-class EsignWebForm(_EsignWebFormBase):
-	"""Custom WebForm override for eSign-specific functionality with custom field types"""
+class EsignWebForm(BaseWebForm):
+	"""eSign behaviour for Web Form, registered through `extend_doctype_class`.
+
+	Frappe composes the final controller from the stock WebForm and every installed app's
+	extension (payments registers one too), so this subclasses the stock WebForm only:
+	subclassing another app's extension would break the class hierarchy whenever that app is
+	installed after esign.
+	"""
 
 	# Custom fields from ../custom/web_form.json
 	esign_enabled: DF.Check | None
 	esign_force_mobile: DF.Check | None
-	esign_update_field: DF.Select[""] | None  # noqa: F722 -- options are set per doctype at runtime, as frappe generates them
+	# A Select whose options are the target doctype's fields, set at runtime (web_form.js).
+	esign_update_field: DF.Data | None
 	esign_update_value: DF.Data | None
 	esign_submit_on_response: DF.Check | None
 	esign_send_notification: DF.Check | None
@@ -215,7 +207,7 @@ class EsignWebForm(_EsignWebFormBase):
 	def _check_signature_exists(self, doc: Document) -> bool:
 		"""Check if all signature fields in the web form already have values."""
 		signature_fields = [
-			field.fieldname for field in self.web_form_fields if field.fieldtype == "Signature"
+			_fieldname(field) for field in self.web_form_fields if field.fieldtype == "Signature"
 		]
 
 		# If no signature fields, not applicable
@@ -240,10 +232,15 @@ class EsignWebForm(_EsignWebFormBase):
 
 		# Get document without permission check - we'll validate via share key
 		doc = frappe.get_doc(self.doc_type, cur_doc_name)
-		doc.flags.ignore_permissions = True
 
-		# Validate access via share key or fallback to standard permissions
-		validate_esign_key(key, doc)
+		# Validate access via share key or fallback to standard permissions. The document is
+		# only marked permission-free afterwards: frappe's website permission check (part of
+		# the fallback) passes any document that already carries ignore_permissions. Without a
+		# key, the web form's own rules (owner, website permission, document permissions) also
+		# let a user in, as in frappe's web form and in accept; the preview and the signed-PDF
+		# download apply the same rule through the web form name the page passes them.
+		validate_esign_access(key, doc, self)
+		doc.flags.ignore_permissions = True
 
 		# Allow public access to the web form if validation passes
 		print_format = frappe.form_dict.get("format", self.print_format) or "standard"
@@ -265,7 +262,9 @@ class EsignWebForm(_EsignWebFormBase):
 		context.doctype = self.doc_type
 		context.name = cur_doc_name
 		context.print_format = print_format
-		form_fields: set[str] = {field.fieldname for field in self.web_form_fields if field.fieldname}
+		form_fields: set[str] = {
+			fieldname for field in self.web_form_fields if (fieldname := _fieldname(field))
+		}
 		form_fields.add("name")
 		form_fields.add("doctype")
 		context.reference_doc = {k: v for k, v in doc.as_dict().items() if k in form_fields}
@@ -280,6 +279,7 @@ class EsignWebForm(_EsignWebFormBase):
 		super().add_custom_context_and_script(context)
 
 		context.key = key  # Pass key to frontend for async API calls
+		context.esign_web_form = self.name  # Lets the async calls apply the keyless web form rules
 		context.printview_url = (
 			"/api/method/frappe.utils.print_format.download_pdf?"
 			f"doctype={self.doc_type}&name={cur_doc_name}&format={print_format}&key={key}"
@@ -289,7 +289,7 @@ class EsignWebForm(_EsignWebFormBase):
 			[
 				"esign.control.bundle.css",
 				"esign.web.bundle.css",
-				"/assets/esign/dist/esign-fonts.css",
+				"esign-fonts.bundle.css",
 			]
 		)
 		context.web_include_js.extend(
@@ -312,7 +312,14 @@ class EsignWebForm(_EsignWebFormBase):
 				# Build the download URL through our key-validated endpoint
 				from urllib.parse import urlencode
 
-				params = urlencode({"doctype": self.doc_type, "docname": cur_doc_name, "key": key})
+				params = urlencode(
+					{
+						"doctype": self.doc_type,
+						"docname": cur_doc_name,
+						"key": key,
+						"web_form": self.name,
+					}
+				)
 				context.signed_pdf_url = (
 					f"/api/method/esign.esign.custom.web_form.download_signed_pdf?{params}"
 				)
@@ -342,7 +349,6 @@ class EsignWebForm(_EsignWebFormBase):
 			if key:
 				try:
 					doc = frappe.get_doc(doctype, name)
-					doc.flags.ignore_permissions = True
 					validate_esign_key(key, doc, require_key=True)
 					return True
 				except frappe.PermissionError:
@@ -351,6 +357,42 @@ class EsignWebForm(_EsignWebFormBase):
 
 		# Fall back to parent method
 		return super().has_web_form_permission(doctype, name, ptype)
+
+
+def _get_esign_web_form(web_form: EsignWebForm | str, doctype: str) -> EsignWebForm | None:
+	"""The eSign-enabled web form for doctype, or None if web_form is not one."""
+	if isinstance(web_form, str):
+		if not frappe.db.exists("Web Form", web_form):
+			return None
+		web_form = cast(EsignWebForm, frappe.get_cached_doc("Web Form", web_form))
+	if not web_form.get("esign_enabled") or web_form.get("doc_type") != doctype:
+		return None
+	return web_form
+
+
+def validate_esign_access(
+	key: str, doc: Document, web_form: EsignWebForm | str | None = None, require_key: bool = False
+) -> bool:
+	"""Validate access to an eSign document for the signing page and its endpoints.
+
+	A key is checked as the share key. Without one, a logged-in user the eSign web form's own
+	rules admit (owner, website permission, document permissions) is let in, so the page, its
+	preview and its signed-PDF download agree; anyone else falls back to validate_esign_key.
+
+	Args:
+		key: The share key, or an empty string
+		doc: The document being accessed
+		web_form: The eSign web form (or its name) the request comes from, if any
+		require_key: Passed on to validate_esign_key when the web form rules do not admit
+
+	Raises:
+		frappe.PermissionError: If access is not granted
+	"""
+	if not key and web_form and frappe.session.user != "Guest":
+		wf = _get_esign_web_form(web_form, doc.doctype)
+		if wf and BaseWebForm.has_web_form_permission(wf, doc.doctype, str(doc.name), "read"):
+			return True
+	return validate_esign_key(key, doc, require_key=require_key)
 
 
 _UNSET = object()
@@ -399,9 +441,9 @@ def _send_esign_notification(
 			)
 			return
 
-		# Build context similar to how Notification.send() does it
+		# Build context the way Notification.send() does
 		context = get_context(doc)
-		context = {"doc": doc, "alert": notification, "comments": None}
+		context.update({"alert": notification, "comments": None})
 		if doc.get("_comments"):
 			context["comments"] = json.loads(str(doc.get("_comments", "[]")))
 
@@ -416,12 +458,14 @@ def _send_esign_notification(
 			)
 			return
 
-		# Render subject and message
+		# Render subject and message. Both come from the Notification, which only System
+		# Managers author: the same trusted source frappe's own Notification.send_an_email
+		# renders them from, with the same sandboxed environment.
 		subject = notification.subject
 		if subject and "{" in subject:
-			subject = frappe.render_template(notification.subject, context)
+			subject = frappe.render_template(subject, context)  # nosemgrep: frappe-ssti
 
-		message = frappe.render_template(notification.message, context) or ""
+		message = frappe.render_template(notification.message, context) or ""  # nosemgrep: frappe-ssti
 
 		# Append audit trail information to the notification email
 		if audit_data:
@@ -442,9 +486,11 @@ def _send_esign_notification(
 				audit_rows.append((_("PDF SHA-256"), pdf_hash))
 
 			if audit_rows:
+				# The values come from the signer's request (user agent, email parameter), so
+				# they are escaped before going into the HTML body.
 				table_rows = "".join(
 					f'<tr><td style="padding:4px 8px;font-weight:bold;white-space:nowrap;vertical-align:top;">{label}</td>'
-					f'<td style="padding:4px 8px;word-break:break-all;">{value}</td></tr>'
+					f'<td style="padding:4px 8px;word-break:break-all;">{escape_html(str(value))}</td></tr>'
 					for label, value in audit_rows
 				)
 				message += (
@@ -503,14 +549,14 @@ def _send_esign_notification(
 		)
 
 		# Handle set_property_after_alert if configured
-		if notification.set_property_after_alert:
+		fieldname = notification.get("set_property_after_alert")  # Literal[None] in frappe's types
+		if fieldname:
 			allow_update = True
-			field_df = doc.meta.get_field(notification.set_property_after_alert)
+			field_df = doc.meta.get_field(fieldname)
 			if doc.docstatus.is_submitted() and field_df and not field_df.allow_on_submit:
 				allow_update = False
 			try:
 				if allow_update and not doc.flags.in_notification_update:
-					fieldname = notification.set_property_after_alert
 					value: str | int | float | None = notification.property_value
 					if field_df and field_df.fieldtype in numeric_fieldtypes:
 						value = cint(value or 0)
@@ -535,21 +581,14 @@ def _send_esign_notification(
 		)
 
 
-def attach_print_to_document(
-	doc: Document,
-	print_format: str,
-	request_data: RequestData,
-	audit_data: AuditData,
-	notification_name: str | None = None,
-):
-	"""Background job to attach the signed PDF to the document.
+@contextmanager
+def _job_request(request_data: RequestData) -> Generator[None]:
+	"""Give a background job the signing request's host, scheme and headers.
 
-	Also records audit trail and SHA-256 hash for document integrity verification.
-	Creates a Communication record for timeline display via additional_timeline_content hook.
-	Optionally triggers a notification with the validated signed PDF attached.
+	The PDF renderer and URL helpers read them from `frappe.local.request`. Only the
+	context-local request is set: assigning `frappe.request` would replace the module-level
+	LocalProxy for the rest of the worker process and leak into later jobs.
 	"""
-	from frappe import attach_print
-
 	mock_request = frappe._dict(
 		{
 			"headers": request_data.get("headers", {}),
@@ -560,72 +599,55 @@ def attach_print_to_document(
 			"scheme": request_data.get("scheme", "https"),
 		}
 	)
-
-	# Only set the context-local request. Assigning `frappe.request` would replace the
-	# module-level LocalProxy for the rest of this worker process and leak into later jobs.
 	prev_request = getattr(frappe.local, "request", _UNSET)
 	frappe.local.request = mock_request
-
 	try:
-		# Refetch the document to ensure latest data
-		doc.reload()
+		yield
+	finally:
+		if prev_request is _UNSET:
+			if hasattr(frappe.local, "request"):
+				del frappe.local.request
+		else:
+			frappe.local.request = prev_request
 
-		# Generate the PDF
-		timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-		print_data = attach_print(
-			doctype=doc.doctype,
-			name=doc.name,
-			file_name=f"{doc.name}_signed_{timestamp_str}",
-			print_format=print_format,
-			doc=doc,
-			print_letterhead=False,
-		)
 
-		# Compute SHA-256 hash of the PDF content
-		pdf_content = print_data["fcontent"]
-		pdf_hash = hashlib.sha256(pdf_content).hexdigest()
-		frappe_content_hash = get_content_hash(pdf_content)
+def _read_file_bytes(file_doc: File) -> bytes:
+	"""The stored bytes of a local File. File.get_content decodes anything that decodes as
+	text (a PDF often does, as windows-1252), and writing that back would change the bytes."""
+	with open(file_doc.get_full_path(), "rb") as f:
+		return f.read()
 
-		# Attach the signed PDF to the document
-		# Note: content_hash must be set explicitly for cloud_storage deduplication to work,
-		# as cloud_storage's validate() doesn't call the core File validate which generates it
-		file_doc = cast(
-			File,
-			frappe.get_doc(
-				{
-					"doctype": "File",
-					"file_name": print_data["fname"],
-					"attached_to_doctype": doc.doctype,
-					"attached_to_name": doc.name,
-					"folder": "Home/Attachments",
-					"is_private": True,
-					"content": pdf_content,
-					"content_hash": frappe_content_hash,
-				}
-			),
-		)
-		file_doc.insert(ignore_permissions=True)
 
-		# Check if this is a cloud_storage-enhanced File (has s3_key and file_association attributes)
-		is_cloud_storage = hasattr(file_doc, "s3_key") and hasattr(file_doc, "file_association")
+def _is_cloud_storage_file(file_doc: File) -> bool:
+	"""Whether cloud_storage's File extension (s3_key, file_association) is installed."""
+	return hasattr(file_doc, "s3_key") and hasattr(file_doc, "file_association")
 
-		if is_cloud_storage:
-			# Extract s3_key from the file_url and persist it
-			s3_key = str(file_doc.file_url or "").replace("/api/method/retrieve?key=", "")
-			if s3_key:
-				file_doc.db_set("s3_key", s3_key)
 
-		# Commit the file transaction to avoid deadlock with Communication's _comments update.
-		# Cloud storage's associate_files() may have modified the parent document, and the
-		# Communication insert will try to update _comments on the same document.
-		frappe.db.commit()
+def record_signature(
+	doctype: str,
+	name: str,
+	file_name: str,
+	pdf_hash: str,
+	request_data: RequestData,
+	audit_data: AuditData,
+	notification_name: str | None = None,
+):
+	"""Background job: record the signing on the document's timeline.
+
+	Creates the eSign Communication (audit data as JSON, shown through the
+	additional_timeline_content hook), links the signed PDF to it and, when the web form
+	names one, sends the notification with that PDF attached.
+	"""
+	with _job_request(request_data):
+		doc = frappe.get_doc(doctype, name)
+		file_doc = cast(File, frappe.get_doc("File", file_name))
 
 		# Create Communication record for timeline display with audit data as JSON
 		audit_content = json.dumps(
 			{
 				**audit_data,
 				"pdf_hash": pdf_hash,
-				"file_name": print_data["fname"],
+				"file_name": file_doc.file_name,
 			}
 		)
 
@@ -646,11 +668,10 @@ def attach_print_to_document(
 		comm.insert(ignore_permissions=True)
 
 		# Associate the PDF with the Communication
-		if is_cloud_storage:
+		if _is_cloud_storage_file(file_doc):
 			# For cloud_storage, add a file_association instead of duplicating the file
 			from frappe.utils import get_datetime
 
-			file_doc.reload()
 			file_doc.append(
 				"file_association",
 				{
@@ -668,13 +689,13 @@ def attach_print_to_document(
 				frappe.get_doc(
 					{
 						"doctype": "File",
-						"file_name": print_data["fname"],
+						"file_name": file_doc.file_name,
 						"attached_to_doctype": "Communication",
 						"attached_to_name": comm.name,
 						"folder": "Home/Attachments",
 						"is_private": True,
-						"content": pdf_content,
-						"content_hash": frappe_content_hash,
+						"content": _read_file_bytes(file_doc),
+						"content_hash": file_doc.content_hash,
 					}
 				),
 			)
@@ -683,17 +704,88 @@ def attach_print_to_document(
 		# Trigger notification with the validated signed PDF attached
 		if notification_name:
 			_send_esign_notification(notification_name, doc, file_doc, audit_data, pdf_hash)
-	finally:
-		if prev_request is _UNSET:
-			if hasattr(frappe.local, "request"):
-				del frappe.local.request
-		else:
-			frappe.local.request = prev_request
+
+
+def attach_print_to_document(
+	doc: Document,
+	print_format: str,
+	request_data: RequestData,
+	audit_data: AuditData,
+	notification_name: str | None = None,
+):
+	"""Background job: render the signed PDF and attach it to the document.
+
+	The audit trail (the Communication, its copy of the PDF and the notification) is written
+	by `record_signature`, a second job queued to start once this job's transaction has
+	committed. The File has to be committed before the Communication updates the document's
+	`_comments`: cloud storage's file association may have changed the document too, and
+	doing both in one transaction deadlocked.
+	"""
+	from frappe import attach_print
+
+	with _job_request(request_data):
+		# Refetch the document to ensure latest data
+		doc.reload()
+
+		# Generate the PDF
+		timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+		print_data = attach_print(
+			doctype=doc.doctype,
+			name=doc.name,
+			file_name=f"{doc.name}_signed_{timestamp_str}",
+			print_format=print_format,
+			doc=doc,
+			print_letterhead=False,
+		)
+
+		# Compute SHA-256 hash of the PDF content
+		pdf_content = print_data["fcontent"]
+		pdf_hash = hashlib.sha256(pdf_content).hexdigest()
+
+		# Attach the signed PDF to the document
+		# Note: content_hash must be set explicitly for cloud_storage deduplication to work,
+		# as cloud_storage's validate() doesn't call the core File validate which generates it
+		file_doc = cast(
+			File,
+			frappe.get_doc(
+				{
+					"doctype": "File",
+					"file_name": print_data["fname"],
+					"attached_to_doctype": doc.doctype,
+					"attached_to_name": doc.name,
+					"folder": "Home/Attachments",
+					"is_private": True,
+					"content": pdf_content,
+					"content_hash": get_content_hash(pdf_content),
+				}
+			),
+		)
+		file_doc.insert(ignore_permissions=True)
+
+		if _is_cloud_storage_file(file_doc):
+			# Extract s3_key from the file_url and persist it
+			s3_key = str(file_doc.file_url or "").replace("/api/method/retrieve?key=", "")
+			if s3_key:
+				file_doc.db_set("s3_key", s3_key)
+
+	frappe.enqueue(
+		record_signature,
+		queue="short",
+		timeout=300,
+		enqueue_after_commit=True,
+		doctype=doc.doctype,
+		name=doc.name,
+		file_name=file_doc.name,
+		pdf_hash=pdf_hash,
+		request_data=request_data,
+		audit_data=audit_data,
+		notification_name=notification_name,
+	)
 
 
 @frappe.whitelist()
 def get_esign_link(
-	doc: Document, web_form_name: str, print_format_name: str = "", recipient_email: str = ""
+	doc: Document | str | dict, web_form_name: str, print_format_name: str = "", recipient_email: str = ""
 ) -> str:
 	"""Get the eSign Web Form link for a given document and web form name.
 
@@ -716,6 +808,10 @@ def get_esign_link(
 			doc = frappe.get_doc(doc["doctype"], doc["name"])
 		except Exception as e:
 			return str(e)
+		# A reference from a request: the link carries a share key that opens the document to
+		# whoever holds it, so the caller must be allowed to email the document (as for
+		# send_esign_email). Server-side callers (Jinja, Python) pass the Document itself.
+		frappe.has_permission(doc.doctype, ptype="email", doc=doc, throw=True)
 
 	try:
 		web_form = EsignWebForm("Web Form", web_form_name)
@@ -725,9 +821,9 @@ def get_esign_link(
 		# Generate the URL
 		from frappe.utils import get_url
 
-		base_url = get_url()
+		base_url = get_url().rstrip("/")
 		share_key = doc.get_document_share_key()
-		web_form_path = f"{web_form.route}/{doc.name}/edit"
+		web_form_path = f"/{(web_form.route or '').lstrip('/')}/{doc.name}/edit"
 		query_string = f"?key={share_key}"
 		if print_format_name:
 			query_string += f"&format={print_format_name}"
@@ -749,7 +845,7 @@ def get_esign_link(
 @frappe.whitelist(allow_guest=True)
 @rate_limit(key="web_form", limit=30, seconds=60)
 def get_print_html(
-	doctype: str, docname: str, print_format: str = "standard", key: str = ""
+	doctype: str, docname: str, print_format: str = "standard", key: str = "", web_form: str = ""
 ) -> PrintHtmlResponse:
 	"""Get the print HTML and styles for a document.
 
@@ -760,6 +856,9 @@ def get_print_html(
 		doctype: The DocType of the document
 		docname: The name of the document
 		print_format: The print format to use (default: "standard")
+		key: The document share key, if any
+		web_form: The eSign web form the page belongs to; without a key, its rules can admit
+			the user (see validate_esign_access)
 
 	Returns:
 		PrintHtmlResponse with print_html and print_style
@@ -777,14 +876,17 @@ def get_print_html(
 
 	# Get the document without permission checks - we'll validate via share key
 	doc = frappe.get_doc(doctype, docname)
+
+	# Validate access via share key or fallback to standard permissions. This has to run
+	# before the document or the request is marked permission-free: without a key, the
+	# fallback is the standard print permission check, which ignore_print_permissions turns
+	# off and which passes a document that carries ignore_permissions.
+	validate_esign_access(key, doc, web_form)
 	doc.flags.ignore_permissions = True
 
-	# Skip internal permission checks since we're using key-based auth
-	# This prevents msgprint warnings from has_permission checks
+	# Access is granted: skip the renderer's own permission checks, which would only add
+	# msgprint warnings for a Guest holding a valid key.
 	frappe.flags.ignore_print_permissions = True
-
-	# Validate access via share key or fallback to standard permissions
-	validate_esign_key(key, doc)
 
 	# Get print format document
 	meta = frappe.get_meta(doctype)
@@ -794,7 +896,7 @@ def get_print_html(
 	# Get rendered print HTML
 	print_html = get_rendered_template(
 		doc=doc,
-		print_format=print_format_doc,  # type: ignore
+		print_format=print_format_doc,
 		meta=meta,
 		trigger_print=False,
 		no_letterhead=bool(frappe.form_dict.get("no_letterhead")),
@@ -805,7 +907,7 @@ def get_print_html(
 	# Get print styles
 	print_style = get_print_style(
 		style=frappe.form_dict.get("style"),
-		print_format=print_format_doc,  # type: ignore
+		print_format=print_format_doc,
 	)
 
 	# Clean up any local message log
@@ -819,7 +921,7 @@ def get_print_html(
 
 @frappe.whitelist(allow_guest=True)
 @rate_limit(key="esign_download", limit=20, seconds=60)
-def download_signed_pdf(doctype: str, docname: str, key: str = ""):
+def download_signed_pdf(doctype: str, docname: str, key: str = "", web_form: str = ""):
 	"""Download a signed PDF attachment with key-based access validation.
 
 	This endpoint allows Guest users to download private signed PDF files
@@ -829,6 +931,8 @@ def download_signed_pdf(doctype: str, docname: str, key: str = ""):
 		doctype: The DocType of the document
 		docname: The name of the document
 		key: The document share key for access validation
+		web_form: The eSign web form the page belongs to; without a key, its rules can admit
+			a logged-in user (see validate_esign_access)
 
 	Returns:
 		The PDF file response
@@ -838,10 +942,11 @@ def download_signed_pdf(doctype: str, docname: str, key: str = ""):
 
 	# Get the document without permission checks - we'll validate via share key
 	doc = frappe.get_doc(doctype, docname)
-	doc.flags.ignore_permissions = True
 
-	# Validate access via share key - require key for guest access
-	validate_esign_key(key, doc, require_key=(frappe.session.user == "Guest"))
+	# Validate access via share key - require key for guest access. Without a key a user
+	# needs the web form's permission or print permission, which a document marked
+	# ignore_permissions would skip.
+	validate_esign_access(key, doc, web_form, require_key=(frappe.session.user == "Guest"))
 
 	# Find the signed PDF for this document
 	# First try to find an eSign Communication for this document
@@ -906,13 +1011,16 @@ def download_signed_pdf(doctype: str, docname: str, key: str = ""):
 	# there instead.
 	if file_url.startswith("/api/method/retrieve"):
 		full_file = frappe.get_doc("File", file_doc.get("name"))
-		sharing_uuid = full_file.get("sharing_link")
-		if not sharing_uuid:
-			sharing_uuid = uuid.uuid4()
-			full_file.db_set("sharing_link", str(int(sharing_uuid) >> 64))
-			frappe.db.commit()  # ensure sharing_link is saved before redirect
+		sharing_link = full_file.get("sharing_link")
+		if not sharing_link:
+			# The same key format cloud_storage's own get_sharing_link writes.
+			sharing_link = str(uuid.uuid4().int >> 64)
+			full_file.db_set("sharing_link", sharing_link)
+			# A GET request is rolled back at its end unless it asks to commit; the link must
+			# exist by the time the browser follows the redirect.
+			frappe.local.flags.commit = True
 		frappe.local.response["type"] = "redirect"
-		frappe.local.response["location"] = f"/api/method/share?key={sharing_uuid}"
+		frappe.local.response["location"] = f"/api/method/share?key={sharing_link}"
 		return
 
 	# Handle private vs public files (local storage)
@@ -983,8 +1091,9 @@ def _collect_audit_data(doc: Document, wf: EsignWebForm, print_format: str) -> A
 	signer_name = None
 
 	# 1. From the email URL search param (link was sent via email)
+	# The parameter is the signer's own input, so only a valid address is recorded.
 	email_param = extract_param_from_referrer("email")
-	if email_param:
+	if email_param and validate_email_address(email_param) == email_param:
 		signer_email = email_param
 
 	# 2. From a Data(Email) field on the web form
@@ -1011,9 +1120,9 @@ def _collect_audit_data(doc: Document, wf: EsignWebForm, print_format: str) -> A
 	signature_fieldtypes = ("Signature", "SignaturePad")
 	for field in wf.web_form_fields:
 		if field.fieldtype in signature_fieldtypes:
-			value = doc.get(field.fieldname)
-			if value:
-				signed_fields.append(field.label or field.fieldname)
+			fieldname = _fieldname(field)
+			if fieldname and doc.get(fieldname):
+				signed_fields.append(field.label or fieldname)
 
 	return AuditData(
 		timestamp=now(),
@@ -1035,23 +1144,15 @@ def _enqueue_print_attachment(doc: Document, wf: EsignWebForm):
 		print_format = wf.print_format or "standard"
 
 	# Extract only serializable data from request
+	request = getattr(frappe.local, "request", None)
+	headers = getattr(request, "headers", None)
 	request_data: RequestData = {
-		"host_url": None,
-		"scheme": "https",
-		"host": None,
-		"headers": {},
-		"method": None,
+		"host_url": getattr(request, "host_url", None),
+		"scheme": getattr(request, "scheme", "https"),
+		"host": getattr(request, "host", None),
+		"headers": dict(headers) if headers is not None else {},
+		"method": getattr(request, "method", None),
 	}
-
-	for attr, default in request_data.items():
-		if hasattr(frappe, "request") and hasattr(frappe.request, attr):
-			value = getattr(frappe.request, attr)
-			# Convert headers to dict if it's the headers attribute
-			if attr == "headers" and value is not None:
-				value = dict(value)
-			request_data[attr] = value
-		else:
-			request_data[attr] = default
 
 	# Collect audit data
 	audit_data = _collect_audit_data(doc, wf, print_format)
@@ -1113,6 +1214,17 @@ def accept(web_form, data):
 		except frappe.PermissionError, frappe.exceptions.LinkExpired:
 			frappe.throw(_("Invalid or expired access key"), frappe.PermissionError)
 
+	# An update needs the document's share key, web form write permission or DocType write
+	# permission: the three ways frappe's own accept lets an update through (the last one by
+	# saving with permission checks on). Otherwise anyone who knows a document name could
+	# overwrite its form fields.
+	if (
+		data.name
+		and not wf.has_web_form_permission(doctype, data.name, "write")
+		and not frappe.has_permission(doctype, "write", data.name)
+	):
+		frappe.throw(_("You are not permitted to update this document"), frappe.PermissionError)
+
 	# Now proceed with the form submission using ignore_permissions
 	files = []
 	files_to_delete = []
@@ -1142,12 +1254,12 @@ def accept(web_form, data):
 
 		# Set web form field values
 		for field in wf.web_form_fields:
-			fieldname = field.fieldname
+			fieldname = _fieldname(field)
 			df = meta.get_field(fieldname)
 			value = data.get(fieldname, "")
 
 			if df and df.fieldtype in ("Attach", "Attach Image"):
-				if value and "data:" and "base64" in value:
+				if value and "data:" in value and "base64" in value:
 					files.append((fieldname, value))
 					if not doc.name:
 						doc.set(fieldname, "")

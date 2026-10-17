@@ -7,7 +7,7 @@ readme = "README.md"
 classifiers = ["License :: OSI Approved :: MIT License"]
 dynamic = ["version"]
 dependencies = [
-	# "frappe~=15.0.0" # Installed and managed by bench.
+	# frappe is installed and managed by bench; see [tool.bench.frappe-dependencies].
 ]
 
 [build-system]
@@ -65,7 +65,7 @@ show_missing = true
 skip_covered = true
 precision = 1
 exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError", "@(abc\\.)?abstractmethod"]
-fail_under = 0
+fail_under = 80
 
 [tool.vulture]
 exclude = [".venv/", "node_modules/", ".frappe-nix/", ".dev-dist/"]
