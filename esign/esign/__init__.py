@@ -5,6 +5,10 @@ import contextlib
 import json
 
 import frappe
+
+# Imported as a module and looked up at call time, so a patched get_attachments (cloud_storage
+# replaces it) is the one called.
+import frappe.desk.form.load
 from frappe import _
 from frappe.core.doctype.communication.communication import Communication
 from frappe.utils import now
@@ -48,7 +52,7 @@ def get_timeline_content(doctype: str, docname: str) -> list[dict]:
 		# Get the attached signed PDF file URL using the patched get_attachments
 		# This works for both standard Frappe and cloud_storage setups
 		file_url = None
-		attachments = frappe.desk.form.load.get_attachments("Communication", comm.name)  # type: ignore
+		attachments = frappe.desk.form.load.get_attachments("Communication", comm.name)
 		for attachment in attachments:
 			if attachment.get("file_name", "").endswith(".pdf"):
 				file_url = attachment.get("file_url")

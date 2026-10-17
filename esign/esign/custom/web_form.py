@@ -4,7 +4,7 @@
 import hashlib
 import json
 import uuid
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime
 from typing import TypedDict, cast
@@ -106,6 +106,16 @@ def extract_param_from_referrer(param: str = "") -> str:
 		return ""
 
 
+def _fieldname(row: Document) -> str | None:
+	"""A web form row's fieldname.
+
+	Frappe declares WebFormField.fieldname (and Notification.set_property_after_alert) as
+	`Literal[None]`, its type for a Select whose options are only filled in at runtime, so
+	the value is read through `get`, which is untyped.
+	"""
+	return row.get("fieldname")
+
+
 def _find_email_fieldname(wf: EsignWebForm) -> str | None:
 	"""Find the fieldname of a Data field with Options='Email' on the web form.
 
@@ -116,10 +126,11 @@ def _find_email_fieldname(wf: EsignWebForm) -> str | None:
 	"""
 	meta = frappe.get_meta(wf.doc_type)
 	for field in wf.web_form_fields:
-		if field.fieldtype == "Data" and field.fieldname:
-			df = meta.get_field(field.fieldname)
+		fieldname = _fieldname(field)
+		if field.fieldtype == "Data" and fieldname:
+			df = meta.get_field(fieldname)
 			if df and df.fieldtype == "Data" and (df.options or "").strip().lower() == "email":
-				return field.fieldname
+				return fieldname
 	return None
 
 
@@ -135,7 +146,8 @@ class EsignWebForm(BaseWebForm):
 	# Custom fields from ../custom/web_form.json
 	esign_enabled: DF.Check | None
 	esign_force_mobile: DF.Check | None
-	esign_update_field: DF.Select[""] | None  # noqa: F722 -- options are set per doctype at runtime, as frappe generates them
+	# A Select whose options are the target doctype's fields, set at runtime (web_form.js).
+	esign_update_field: DF.Data | None
 	esign_update_value: DF.Data | None
 	esign_submit_on_response: DF.Check | None
 	esign_send_notification: DF.Check | None
@@ -195,7 +207,7 @@ class EsignWebForm(BaseWebForm):
 	def _check_signature_exists(self, doc: Document) -> bool:
 		"""Check if all signature fields in the web form already have values."""
 		signature_fields = [
-			field.fieldname for field in self.web_form_fields if field.fieldtype == "Signature"
+			_fieldname(field) for field in self.web_form_fields if field.fieldtype == "Signature"
 		]
 
 		# If no signature fields, not applicable
@@ -245,7 +257,9 @@ class EsignWebForm(BaseWebForm):
 		context.doctype = self.doc_type
 		context.name = cur_doc_name
 		context.print_format = print_format
-		form_fields: set[str] = {field.fieldname for field in self.web_form_fields if field.fieldname}
+		form_fields: set[str] = {
+			fieldname for field in self.web_form_fields if (fieldname := _fieldname(field))
+		}
 		form_fields.add("name")
 		form_fields.add("doctype")
 		context.reference_doc = {k: v for k, v in doc.as_dict().items() if k in form_fields}
@@ -428,7 +442,7 @@ def _send_esign_notification(
 				# they are escaped before going into the HTML body.
 				table_rows = "".join(
 					f'<tr><td style="padding:4px 8px;font-weight:bold;white-space:nowrap;vertical-align:top;">{label}</td>'
-					f'<td style="padding:4px 8px;word-break:break-all;">{escape_html(value)}</td></tr>'
+					f'<td style="padding:4px 8px;word-break:break-all;">{escape_html(str(value))}</td></tr>'
 					for label, value in audit_rows
 				)
 				message += (
@@ -487,14 +501,14 @@ def _send_esign_notification(
 		)
 
 		# Handle set_property_after_alert if configured
-		if notification.set_property_after_alert:
+		fieldname = notification.get("set_property_after_alert")  # Literal[None] in frappe's types
+		if fieldname:
 			allow_update = True
-			field_df = doc.meta.get_field(notification.set_property_after_alert)
+			field_df = doc.meta.get_field(fieldname)
 			if doc.docstatus.is_submitted() and field_df and not field_df.allow_on_submit:
 				allow_update = False
 			try:
 				if allow_update and not doc.flags.in_notification_update:
-					fieldname = notification.set_property_after_alert
 					value: str | int | float | None = notification.property_value
 					if field_df and field_df.fieldtype in numeric_fieldtypes:
 						value = cint(value or 0)
@@ -520,7 +534,7 @@ def _send_esign_notification(
 
 
 @contextmanager
-def _job_request(request_data: RequestData) -> Iterator[None]:
+def _job_request(request_data: RequestData) -> Generator[None]:
 	"""Give a background job the signing request's host, scheme and headers.
 
 	The PDF renderer and URL helpers read them from `frappe.local.request`. Only the
@@ -830,7 +844,7 @@ def get_print_html(
 	# Get rendered print HTML
 	print_html = get_rendered_template(
 		doc=doc,
-		print_format=print_format_doc,  # type: ignore
+		print_format=print_format_doc,
 		meta=meta,
 		trigger_print=False,
 		no_letterhead=bool(frappe.form_dict.get("no_letterhead")),
@@ -841,7 +855,7 @@ def get_print_html(
 	# Get print styles
 	print_style = get_print_style(
 		style=frappe.form_dict.get("style"),
-		print_format=print_format_doc,  # type: ignore
+		print_format=print_format_doc,
 	)
 
 	# Clean up any local message log
@@ -1050,9 +1064,9 @@ def _collect_audit_data(doc: Document, wf: EsignWebForm, print_format: str) -> A
 	signature_fieldtypes = ("Signature", "SignaturePad")
 	for field in wf.web_form_fields:
 		if field.fieldtype in signature_fieldtypes:
-			value = doc.get(field.fieldname)
-			if value:
-				signed_fields.append(field.label or field.fieldname)
+			fieldname = _fieldname(field)
+			if fieldname and doc.get(fieldname):
+				signed_fields.append(field.label or fieldname)
 
 	return AuditData(
 		timestamp=now(),
@@ -1074,23 +1088,15 @@ def _enqueue_print_attachment(doc: Document, wf: EsignWebForm):
 		print_format = wf.print_format or "standard"
 
 	# Extract only serializable data from request
+	request = getattr(frappe.local, "request", None)
+	headers = getattr(request, "headers", None)
 	request_data: RequestData = {
-		"host_url": None,
-		"scheme": "https",
-		"host": None,
-		"headers": {},
-		"method": None,
+		"host_url": getattr(request, "host_url", None),
+		"scheme": getattr(request, "scheme", "https"),
+		"host": getattr(request, "host", None),
+		"headers": dict(headers) if headers is not None else {},
+		"method": getattr(request, "method", None),
 	}
-
-	for attr, default in request_data.items():
-		if hasattr(frappe, "request") and hasattr(frappe.request, attr):
-			value = getattr(frappe.request, attr)
-			# Convert headers to dict if it's the headers attribute
-			if attr == "headers" and value is not None:
-				value = dict(value)
-			request_data[attr] = value
-		else:
-			request_data[attr] = default
 
 	# Collect audit data
 	audit_data = _collect_audit_data(doc, wf, print_format)
@@ -1186,12 +1192,12 @@ def accept(web_form, data):
 
 		# Set web form field values
 		for field in wf.web_form_fields:
-			fieldname = field.fieldname
+			fieldname = _fieldname(field)
 			df = meta.get_field(fieldname)
 			value = data.get(fieldname, "")
 
 			if df and df.fieldtype in ("Attach", "Attach Image"):
-				if value and "data:" and "base64" in value:
+				if value and "data:" in value and "base64" in value:
 					files.append((fieldname, value))
 					if not doc.name:
 						doc.set(fieldname, "")
