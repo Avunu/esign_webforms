@@ -359,6 +359,17 @@ class EsignWebForm(BaseWebForm):
 		return super().has_web_form_permission(doctype, name, ptype)
 
 
+def _get_esign_web_form(web_form: EsignWebForm | str, doctype: str) -> EsignWebForm | None:
+	"""The eSign-enabled web form for doctype, or None if web_form is not one."""
+	if isinstance(web_form, str):
+		if not frappe.db.exists("Web Form", web_form):
+			return None
+		web_form = cast(EsignWebForm, frappe.get_cached_doc("Web Form", web_form))
+	if not web_form.get("esign_enabled") or web_form.get("doc_type") != doctype:
+		return None
+	return web_form
+
+
 def validate_esign_access(
 	key: str, doc: Document, web_form: EsignWebForm | str | None = None, require_key: bool = False
 ) -> bool:
@@ -382,17 +393,6 @@ def validate_esign_access(
 		if wf and BaseWebForm.has_web_form_permission(wf, doc.doctype, str(doc.name), "read"):
 			return True
 	return validate_esign_key(key, doc, require_key=require_key)
-
-
-def _get_esign_web_form(web_form: EsignWebForm | str, doctype: str) -> EsignWebForm | None:
-	"""The eSign-enabled web form for doctype, or None if web_form is not one."""
-	if isinstance(web_form, str):
-		if not frappe.db.exists("Web Form", web_form):
-			return None
-		web_form = cast(EsignWebForm, frappe.get_cached_doc("Web Form", web_form))
-	if not web_form.get("esign_enabled") or web_form.get("doc_type") != doctype:
-		return None
-	return web_form
 
 
 _UNSET = object()
