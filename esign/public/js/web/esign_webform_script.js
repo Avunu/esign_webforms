@@ -1,3 +1,6 @@
+// Copyright (c) 2026, Avunu LLC and contributors
+// For license information, please see license.txt
+
 /**
  * eSign WebForm Script
  *
@@ -38,8 +41,7 @@ function scaleToFitDocumentPane() {
 	// Subtract the actual horizontal padding so the print format doesn't
 	// overflow into the padded area.
 	const paneStyle = getComputedStyle(documentPane);
-	const horizontalPadding =
-		parseFloat(paneStyle.paddingLeft) + parseFloat(paneStyle.paddingRight);
+	const horizontalPadding = parseFloat(paneStyle.paddingLeft) + parseFloat(paneStyle.paddingRight);
 	const availableWidth = documentPane.clientWidth - horizontalPadding;
 
 	// Calculate scale factor
@@ -90,17 +92,13 @@ function loadPrintHtml() {
 		})
 		.then((response) => {
 			if (response.message) {
-				renderPrintHtml(
-					response.message.print_html,
-					response.message.print_style,
-				);
+				renderPrintHtml(response.message.print_html, response.message.print_style);
 			}
 		})
 		.catch((error) => {
 			console.error("Failed to load print HTML:", error);
 			if (loadingEl) {
-				loadingEl.innerHTML =
-					'<p class="text-danger">Failed to load document preview.</p>';
+				loadingEl.innerHTML = '<p class="text-danger">Failed to load document preview.</p>';
 			}
 		});
 }
@@ -220,9 +218,7 @@ class EsignWebForm extends WebForm {
 
 	handle_redirect() {
 		// Countdown and redirect
-		const timeSpan = document.querySelector(
-			".esign-redirect-message .time",
-		);
+		const timeSpan = document.querySelector(".esign-redirect-message .time");
 		if (!timeSpan) {
 			window.location.href = this.success_url;
 			return;
@@ -251,10 +247,7 @@ class EsignWebForm extends WebForm {
 		let is_new = this.is_new;
 		let valid = this.validate && this.validate();
 		if (!valid && valid !== undefined) {
-			frappe.msgprint(
-				__("Couldn't save, please check the data you have entered"),
-				__("Validation Error"),
-			);
+			frappe.msgprint(__("Couldn't save, please check the data you have entered"), __("Validation Error"));
 			return false;
 		}
 
@@ -292,19 +285,16 @@ class EsignWebForm extends WebForm {
 					// Success
 					this.handle_success(response.message);
 					frappe.web_form.events.trigger("after_save");
-					this.after_save && this.after_save();
+					if (this.after_save) {
+						this.after_save();
+					}
 					// args doctype and docname added to link doctype in file manager
-					if (
-						is_new &&
-						(response.message.attachment || response.message.file)
-					) {
+					if (is_new && (response.message.attachment || response.message.file)) {
 						frappe.call({
 							type: "POST",
 							method: "frappe.handler.upload_file",
 							args: {
-								file_url:
-									response.message.attachment ||
-									response.message.file,
+								file_url: response.message.attachment || response.message.file,
 								doctype: response.message.doctype,
 								docname: response.message.name,
 							},
@@ -337,27 +327,27 @@ frappe.ready(function () {
 
 	show_login_prompt();
 
-	web_form_doc.is_list ? show_list() : show_form();
+	if (web_form_doc.is_list) {
+		show_list();
+	} else {
+		show_form();
+	}
 
 	function show_login_prompt() {
-		if (frappe.session.user != "Guest" || !web_form_doc.login_required)
-			return;
+		if (frappe.session.user != "Guest" || !web_form_doc.login_required) return;
 		const login_required = new frappe.ui.Dialog({
 			title: __("Not Permitted"),
 			primary_action_label: __("Login"),
 			primary_action: () => {
-				window.location.replace(
-					"/login?redirect-to=" + window.location.pathname,
-				);
+				window.location.replace("/login?redirect-to=" + window.location.pathname);
 			},
 		});
 		login_required.show();
-		login_required.set_message(
-			__("You are not permitted to access this page without login."),
-		);
+		login_required.set_message(__("You are not permitted to access this page without login."));
 	}
 
 	function show_list() {
+		// oxlint-disable-next-line no-new -- WebFormList renders the list from its constructor
 		new WebFormList({
 			doctype: web_form_doc.doc_type,
 			web_form_name: web_form_doc.name,
@@ -389,12 +379,10 @@ frappe.ready(function () {
 		});
 	}
 
-	function setup_fields(web_form_doc, doc_data) {
-		web_form_doc.web_form_fields.forEach((df) => {
+	function setup_fields(form_doc, doc_data) {
+		form_doc.web_form_fields.forEach((df) => {
 			df.is_web_form = true;
-			df.read_only =
-				df.read_only ||
-				(!web_form_doc.is_new && !web_form_doc.in_edit_mode);
+			df.read_only = df.read_only || (!form_doc.is_new && !form_doc.in_edit_mode);
 			if (df.fieldtype === "Table") {
 				df.get_data = () => {
 					let data = [];

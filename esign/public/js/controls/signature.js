@@ -1,3 +1,6 @@
+// Copyright (c) 2026, Avunu LLC and contributors
+// For license information, please see license.txt
+
 import SignaturePad from "signature_pad";
 import { createIconHast, toDom } from "./utils";
 
@@ -132,10 +135,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 							type: "element",
 							tagName: "div",
 							properties: {
-								className: [
-									"signature-overlay-content",
-									"add-signature",
-								],
+								className: ["signature-overlay-content", "add-signature"],
 							},
 							children: [
 								{
@@ -147,9 +147,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 									properties: {
 										className: ["signature-overlay-text"],
 									},
-									children: [
-										{ type: "text", value: addText },
-									],
+									children: [{ type: "text", value: addText }],
 								},
 							],
 						},
@@ -157,10 +155,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 							type: "element",
 							tagName: "div",
 							properties: {
-								className: [
-									"signature-overlay-content",
-									"replace-signature",
-								],
+								className: ["signature-overlay-content", "replace-signature"],
 							},
 							children: [
 								{
@@ -172,9 +167,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 									properties: {
 										className: ["signature-overlay-text"],
 									},
-									children: [
-										{ type: "text", value: replaceText },
-									],
+									children: [{ type: "text", value: replaceText }],
 								},
 							],
 						},
@@ -272,20 +265,14 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 									tagName: "button",
 									properties: {
 										type: "button",
-										className: [
-											"signature-mode-btn",
-											"active",
-										],
+										className: ["signature-mode-btn", "active"],
 										dataMode: "draw",
 									},
 									data: {
-										constructor: (el) =>
-											this.mode_buttons.push(el),
+										constructor: (el) => this.mode_buttons.push(el),
 										onclick: () => this.select_mode("draw"),
 									},
-									children: [
-										{ type: "text", value: __("Draw") },
-									],
+									children: [{ type: "text", value: __("Draw") }],
 								},
 								{
 									type: "element",
@@ -296,13 +283,10 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 										dataMode: "type",
 									},
 									data: {
-										constructor: (el) =>
-											this.mode_buttons.push(el),
+										constructor: (el) => this.mode_buttons.push(el),
 										onclick: () => this.select_mode("type"),
 									},
-									children: [
-										{ type: "text", value: __("Type") },
-									],
+									children: [{ type: "text", value: __("Type") }],
 								},
 								{
 									type: "element",
@@ -313,14 +297,10 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 										dataMode: "upload",
 									},
 									data: {
-										constructor: (el) =>
-											this.mode_buttons.push(el),
-										onclick: () =>
-											this.select_mode("upload"),
+										constructor: (el) => this.mode_buttons.push(el),
+										onclick: () => this.select_mode("upload"),
 									},
-									children: [
-										{ type: "text", value: __("Upload") },
-									],
+									children: [{ type: "text", value: __("Upload") }],
 								},
 							],
 						},
@@ -337,34 +317,25 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 									type: "element",
 									tagName: "div",
 									properties: {
-										className: [
-											"signature-section",
-											"signature-draw-section",
-											"active",
-										],
+										className: ["signature-section", "signature-draw-section", "active"],
 										dataSection: "draw",
 									},
 									data: {
-										constructor: (el) =>
-											this.mode_sections.push(el),
+										constructor: (el) => this.mode_sections.push(el),
 									},
 									children: [
 										{
 											type: "element",
 											tagName: "div",
 											properties: {
-												className: [
-													"signature-canvas-wrapper",
-												],
+												className: ["signature-canvas-wrapper"],
 											},
 											children: [
 												{
 													type: "element",
 													tagName: "canvas",
 													properties: {
-														className: [
-															"signature-pad-canvas",
-														],
+														className: ["signature-pad-canvas"],
 													},
 													ref: "pad_canvas",
 													children: [],
@@ -373,9 +344,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 													type: "element",
 													tagName: "div",
 													properties: {
-														className: [
-															"signature-line",
-														],
+														className: ["signature-line"],
 													},
 													children: [],
 												},
@@ -385,9 +354,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 											type: "element",
 											tagName: "div",
 											properties: {
-												className: [
-													"signature-btn-row",
-												],
+												className: ["signature-btn-row"],
 											},
 											children: [
 												{
@@ -396,28 +363,16 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 													properties: {
 														href: "#",
 														type: "button",
-														className: [
-															"signature-reset",
-															"btn",
-															"icon-btn",
-														],
+														className: ["signature-reset", "btn", "icon-btn"],
 													},
 													data: {
 														onclick: () => {
-															if (
-																this
-																	.signature_pad
-															) {
+															if (this.signature_pad) {
 																this.signature_pad.clear();
 															}
 														},
 													},
-													children: [
-														createIconHast(
-															"es-line-reload",
-															"sm",
-														),
-													],
+													children: [createIconHast("es-line-reload", "sm")],
 												},
 											],
 										},
@@ -428,24 +383,18 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 									type: "element",
 									tagName: "div",
 									properties: {
-										className: [
-											"signature-section",
-											"signature-type-section",
-										],
+										className: ["signature-section", "signature-type-section"],
 										dataSection: "type",
 									},
 									data: {
-										constructor: (el) =>
-											this.mode_sections.push(el),
+										constructor: (el) => this.mode_sections.push(el),
 									},
 									children: [
 										{
 											type: "element",
 											tagName: "div",
 											properties: {
-												className: [
-													"signature-type-inputs",
-												],
+												className: ["signature-type-inputs"],
 											},
 											children: [
 												{
@@ -453,18 +402,12 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 													tagName: "input",
 													properties: {
 														type: "text",
-														className: [
-															"signature-typed-input",
-														],
-														placeholder: __(
-															"Type your {0}",
-															[termLower],
-														),
+														className: ["signature-typed-input"],
+														placeholder: __("Type your {0}", [termLower]),
 													},
 													ref: "typed_input",
 													data: {
-														oninput: () =>
-															this.update_typed_preview(),
+														oninput: () => this.update_typed_preview(),
 													},
 													children: [],
 												},
@@ -473,9 +416,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 													type: "element",
 													tagName: "div",
 													properties: {
-														className: [
-															"signature-font-select",
-														],
+														className: ["signature-font-select"],
 													},
 													children: [
 														{
@@ -483,26 +424,17 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 															tagName: "button",
 															properties: {
 																type: "button",
-																className: [
-																	"signature-font-trigger",
-																],
-																popoverTarget:
-																	fontOptionsId,
-																popoverTargetAction:
-																	"toggle",
+																className: ["signature-font-trigger"],
+																popoverTarget: fontOptionsId,
+																popoverTargetAction: "toggle",
 															},
 															children: [
 																{
 																	type: "element",
-																	tagName:
-																		"span",
-																	properties:
-																		{
-																			className:
-																				[
-																					"signature-font-value",
-																				],
-																		},
+																	tagName: "span",
+																	properties: {
+																		className: ["signature-font-value"],
+																	},
 																	ref: "font_value_display",
 																	children: [
 																		{
@@ -513,15 +445,10 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 																},
 																{
 																	type: "element",
-																	tagName:
-																		"span",
-																	properties:
-																		{
-																			className:
-																				[
-																					"signature-font-arrow",
-																				],
-																		},
+																	tagName: "span",
+																	properties: {
+																		className: ["signature-font-arrow"],
+																	},
 																	children: [
 																		{
 																			type: "text",
@@ -537,9 +464,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 															properties: {
 																id: fontOptionsId,
 																popover: "auto",
-																className: [
-																	"signature-font-popover",
-																],
+																className: ["signature-font-popover"],
 															},
 															ref: "font_popover",
 															children: [],
@@ -553,18 +478,14 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 											type: "element",
 											tagName: "div",
 											properties: {
-												className: [
-													"signature-typed-preview",
-												],
+												className: ["signature-typed-preview"],
 											},
 											children: [
 												{
 													type: "element",
 													tagName: "div",
 													properties: {
-														className: [
-															"signature-typed-text",
-														],
+														className: ["signature-typed-text"],
 													},
 													ref: "typed_preview_text",
 													children: [],
@@ -573,9 +494,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 													type: "element",
 													tagName: "div",
 													properties: {
-														className: [
-															"signature-line",
-														],
+														className: ["signature-line"],
 													},
 													children: [],
 												},
@@ -588,62 +507,39 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 									type: "element",
 									tagName: "div",
 									properties: {
-										className: [
-											"signature-section",
-											"signature-upload-section",
-										],
+										className: ["signature-section", "signature-upload-section"],
 										dataSection: "upload",
 									},
 									data: {
-										constructor: (el) =>
-											this.mode_sections.push(el),
+										constructor: (el) => this.mode_sections.push(el),
 									},
 									children: [
 										{
 											type: "element",
 											tagName: "div",
 											properties: {
-												className: [
-													"signature-upload-area",
-												],
+												className: ["signature-upload-area"],
 											},
 											ref: "upload_area",
 											data: {
 												onclick: (e) => {
-													if (
-														e.target !==
-														this.file_input
-													) {
+													if (e.target !== this.file_input) {
 														this.file_input.click();
 													}
 												},
 												ondragover: (e) => {
 													e.preventDefault();
-													this.upload_area.classList.add(
-														"drag-over",
-													);
+													this.upload_area.classList.add("drag-over");
 												},
 												ondragleave: () => {
-													this.upload_area.classList.remove(
-														"drag-over",
-													);
+													this.upload_area.classList.remove("drag-over");
 												},
 												ondrop: (e) => {
 													e.preventDefault();
-													this.upload_area.classList.remove(
-														"drag-over",
-													);
-													const file =
-														e.dataTransfer.files[0];
-													if (
-														file &&
-														file.type.startsWith(
-															"image/",
-														)
-													) {
-														this.process_uploaded_file(
-															file,
-														);
+													this.upload_area.classList.remove("drag-over");
+													const file = e.dataTransfer.files[0];
+													if (file && file.type.startsWith("image/")) {
+														this.process_uploaded_file(file);
 													}
 												},
 											},
@@ -654,16 +550,11 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 													properties: {
 														type: "file",
 														accept: "image/*",
-														className: [
-															"signature-file-input",
-														],
+														className: ["signature-file-input"],
 													},
 													ref: "file_input",
 													data: {
-														onchange: (e) =>
-															this.handle_file_select(
-																e,
-															),
+														onchange: (e) => this.handle_file_select(e),
 													},
 													children: [],
 												},
@@ -671,16 +562,11 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 													type: "element",
 													tagName: "div",
 													properties: {
-														className: [
-															"signature-upload-prompt",
-														],
+														className: ["signature-upload-prompt"],
 													},
 													ref: "upload_prompt",
 													children: [
-														createIconHast(
-															"upload",
-															"lg",
-														),
+														createIconHast("upload", "lg"),
 														{
 															type: "element",
 															tagName: "div",
@@ -688,9 +574,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 															children: [
 																{
 																	type: "text",
-																	value: __(
-																		"Click or drag to upload",
-																	),
+																	value: __("Click or drag to upload"),
 																},
 															],
 														},
@@ -700,9 +584,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 													type: "element",
 													tagName: "div",
 													properties: {
-														className: [
-															"signature-upload-preview",
-														],
+														className: ["signature-upload-preview"],
 													},
 													ref: "upload_preview",
 													children: [
@@ -710,9 +592,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 															type: "element",
 															tagName: "img",
 															properties: {
-																className: [
-																	"signature-upload-img",
-																],
+																className: ["signature-upload-img"],
 															},
 															ref: "upload_img",
 															children: [],
@@ -738,12 +618,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 							tagName: "button",
 							properties: {
 								type: "button",
-								className: [
-									"btn",
-									"btn-md",
-									"signature-btn",
-									"signature-btn-secondary",
-								],
+								className: ["btn", "btn-md", "signature-btn", "signature-btn-secondary"],
 							},
 							data: { onclick: () => this.hide_dialog() },
 							children: [{ type: "text", value: __("Cancel") }],
@@ -753,12 +628,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 							tagName: "button",
 							properties: {
 								type: "button",
-								className: [
-									"btn",
-									"btn-md",
-									"signature-btn",
-									"signature-btn-primary",
-								],
+								className: ["btn", "btn-md", "signature-btn", "signature-btn-primary"],
 							},
 							data: { onclick: () => this.handle_insert() },
 							children: [
@@ -827,10 +697,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 
 		// Update section visibility
 		this.mode_sections.forEach((section) => {
-			section.classList.toggle(
-				"active",
-				section.dataset.section === mode,
-			);
+			section.classList.toggle("active", section.dataset.section === mode);
 		});
 
 		// Initialize signature pad when switching to draw mode
@@ -867,10 +734,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 
 		if (rect.width === 0 || rect.height === 0) return;
 
-		if (
-			this.pad_canvas.width !== rect.width * ratio ||
-			this.pad_canvas.height !== rect.height * ratio
-		) {
+		if (this.pad_canvas.width !== rect.width * ratio || this.pad_canvas.height !== rect.height * ratio) {
 			this.pad_canvas.width = rect.width * ratio;
 			this.pad_canvas.height = rect.height * ratio;
 			this.pad_canvas.getContext("2d").scale(ratio, ratio);
@@ -946,9 +810,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 	 */
 	update_typed_preview() {
 		const text = this.typed_input.value || "";
-		const option = this._font_options.find(
-			(o) => o.value === this._selected_font,
-		);
+		const option = this._font_options.find((o) => o.value === this._selected_font);
 		const fontFamily = option?.fontFamily || SIGNATURE_FONTS[0].fontFamily;
 
 		this.typed_preview_text.textContent = text;
@@ -972,12 +834,12 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 	 */
 	process_uploaded_file(file) {
 		const reader = new FileReader();
-		reader.onload = (e) => {
+		reader.addEventListener("load", (e) => {
 			this._upload_data = e.target.result;
 			this.upload_img.src = this._upload_data;
 			this.upload_preview.classList.add("active");
 			this.upload_prompt.classList.add("hidden");
-		};
+		});
 		reader.readAsDataURL(file);
 	}
 
@@ -1031,9 +893,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 	 * @returns {string} Base64 data URL
 	 */
 	convert_typed_to_base64(text) {
-		const option = this._font_options.find(
-			(o) => o.value === this._selected_font,
-		);
+		const option = this._font_options.find((o) => o.value === this._selected_font);
 		const fontFamily = option?.fontFamily || SIGNATURE_FONTS[0].fontFamily;
 
 		const canvas = document.createElement("canvas");
@@ -1087,7 +947,7 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 			ctx.fillRect(0, 0, canvas.width, canvas.height);
 
 			const img = new Image();
-			img.onload = () => {
+			img.addEventListener("load", () => {
 				const padding = 20;
 				const maxWidth = canvas.width - padding * 2;
 				const maxHeight = canvas.height - padding * 2;
@@ -1110,8 +970,8 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 
 				ctx.drawImage(img, x, y, width, height);
 				resolve(canvas.toDataURL("image/png"));
-			};
-			img.onerror = reject;
+			});
+			img.addEventListener("error", reject);
 			img.src = dataUrl;
 		});
 	}
@@ -1170,25 +1030,14 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 		this.setup_theme_observer();
 
 		const ctx = this.display_canvas.getContext("2d");
-		ctx.clearRect(
-			0,
-			0,
-			this.display_canvas.width,
-			this.display_canvas.height,
-		);
+		ctx.clearRect(0, 0, this.display_canvas.width, this.display_canvas.height);
 
 		const value = this.get_value();
 		if (value) {
 			const img = new Image();
-			img.onload = () => {
-				ctx.drawImage(
-					img,
-					0,
-					0,
-					this.display_canvas.width,
-					this.display_canvas.height,
-				);
-			};
+			img.addEventListener("load", () => {
+				ctx.drawImage(img, 0, 0, this.display_canvas.width, this.display_canvas.height);
+			});
 			img.src = value;
 			this.display_wrapper.classList.add("has-signature");
 		} else {
@@ -1202,23 +1051,13 @@ export class ControlSignature extends frappe.ui.form.ControlData {
 	 */
 	render_empty_display() {
 		const ctx = this.display_canvas.getContext("2d");
-		ctx.clearRect(
-			0,
-			0,
-			this.display_canvas.width,
-			this.display_canvas.height,
-		);
+		ctx.clearRect(0, 0, this.display_canvas.width, this.display_canvas.height);
 
 		ctx.setLineDash([5, 5]);
 		// Canvas can't parse var(); resolve the themed border color from the DOM.
 		ctx.strokeStyle = this.resolve_css_color("--border-color");
 		ctx.lineWidth = 2;
-		ctx.strokeRect(
-			10,
-			10,
-			this.display_canvas.width - 20,
-			this.display_canvas.height - 20,
-		);
+		ctx.strokeRect(10, 10, this.display_canvas.width - 20, this.display_canvas.height - 20);
 		ctx.setLineDash([]);
 	}
 

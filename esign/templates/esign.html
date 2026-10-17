@@ -1,4 +1,4 @@
-{% extends "templates/base.html" %}
+{% extends "templates/base.html" %}{# frappe-vulture:ignore -- frappe's own template, resolved on a bench #}
 {% block title %}eSign: {{ title }}{% endblock %}
 
 {%- block head -%}
@@ -29,8 +29,8 @@
 {%- block footer -%}{%- endblock -%}
 
 <!-- include icons -->
-{% include "public/icons/timeless/icons.svg" %}
-{% include "public/icons/espresso/icons.svg" %}
+{% include "public/icons/timeless/icons.svg" %}{# frappe-vulture:ignore -- frappe's own template, resolved on a bench #}
+{% include "public/icons/espresso/icons.svg" %}{# frappe-vulture:ignore -- frappe's own template, resolved on a bench #}
 
 
 {% block content %}
@@ -176,7 +176,7 @@
 				<form role="form" class="web-form esign-form">
 					<div class="esign-form-body">
 						<div class="web-form-wrapper">
-							{% include "website/doctype/web_form/templates/web_form_skeleton.html" %}
+							{% include "website/doctype/web_form/templates/web_form_skeleton.html" %}{# frappe-vulture:ignore -- frappe's own template, resolved on a bench #}
 						</div>
 					</div>
 

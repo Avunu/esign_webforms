@@ -1,0 +1,15 @@
+# zizmor: static analysis of the workflows and dependabot.yml, run by the managed prek hook.
+# App-owned until frappe-nix's CI module renders this file; then sync takes it over.
+# Third-party actions must be hash-pinned (dependabot keeps the hashes moving); GitHub's own
+# may ride a major tag.
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        "actions/*": ref-pin
+        "github/*": ref-pin
+        "*": hash-pin
+  # The profile's dependabot cooldown (dependabot.cooldown-days) is 3 days.
+  dependabot-cooldown:
+    config:
+      days: 3

@@ -1,3 +1,6 @@
+// Copyright (c) 2026, Avunu LLC and contributors
+// For license information, please see license.txt
+
 import "./templates/esign_timeline.html";
 
 $(document).on("form-refresh", function (event, frm) {
@@ -11,11 +14,7 @@ $(document).on("form-refresh", function (event, frm) {
 				const esign_dialog = new ESignDialog(frm);
 				frm.add_custom_button(__("Send for eSign"), () => {
 					if (frm.doc.__islocal) {
-						frappe.msgprint(
-							__(
-								"Please save the document before sending for eSign.",
-							),
-						);
+						frappe.msgprint(__("Please save the document before sending for eSign."));
 						return;
 					}
 					esign_dialog.show();
@@ -96,8 +95,7 @@ class ESignDialog {
 						filters: { esign_request: 1 },
 					}),
 					onchange: () => {
-						const template =
-							this.dialog.get_value("email_template");
+						const template = this.dialog.get_value("email_template");
 						if (template) {
 							this.load_email_template(template);
 						}
@@ -132,8 +130,7 @@ class ESignDialog {
 				{
 					fieldtype: "HTML",
 					fieldname: "esign_link_preview",
-					options:
-						"<p><em>Select a web form to preview the eSign link here.</em></p>",
+					options: "<p><em>Select a web form to preview the eSign link here.</em></p>",
 				},
 				{
 					fieldtype: "Section Break",
@@ -185,20 +182,12 @@ class ESignDialog {
 						label: wf.title,
 						value: wf.name,
 					}));
-					this.dialog.set_df_property(
-						"web_form",
-						"options",
-						[].concat(options),
-					);
+					this.dialog.set_df_property("web_form", "options", [].concat(options));
 					this.dialog.set_value("web_form", options[0]?.value);
 					this.dialog.show();
 					this.prefill_email_account();
 				} else {
-					frappe.msgprint(
-						__("No eSign-enabled web forms found for {0}", [
-							this.frm.doctype,
-						]),
-					);
+					frappe.msgprint(__("No eSign-enabled web forms found for {0}", [this.frm.doctype]));
 				}
 			},
 		});
@@ -208,11 +197,7 @@ class ESignDialog {
 		// Try custom hook first
 		if (this.frm?.events.get_email_account) {
 			try {
-				const custom_email_account =
-					await this.frm.events.get_email_account(
-						this.frm,
-						"recipients",
-					);
+				const custom_email_account = await this.frm.events.get_email_account(this.frm, "recipients");
 				if (custom_email_account) {
 					// Ensure proper format for MultiSelect
 					this.dialog.set_value("email_account", custom_email_account);
@@ -220,8 +205,7 @@ class ESignDialog {
 			} catch (error) {
 				console.error("Error fetching custom email accounts:", error);
 			}
-		}
-		else {
+		} else {
 			const filters = { enable_outgoing: 1 };
 			if (this.frm.doc.company) {
 				filters.company = this.frm.doc.company;
@@ -238,12 +222,8 @@ class ESignDialog {
 					if (!r.message || r.message.length === 0) return;
 
 					const accounts = r.message;
-					const default_account = accounts.find(
-						(a) => a.default_outgoing,
-					);
-					const selected =
-						default_account ||
-						(accounts.length === 1 ? accounts[0] : null);
+					const default_account = accounts.find((a) => a.default_outgoing);
+					const selected = default_account || (accounts.length === 1 ? accounts[0] : null);
 
 					if (selected) {
 						this.dialog.set_value("email_account", selected.name);
@@ -252,7 +232,6 @@ class ESignDialog {
 			});
 		}
 	}
-
 
 	on_web_form_change() {
 		const web_form_name = this.dialog.get_value("web_form");
@@ -271,11 +250,7 @@ class ESignDialog {
 		// Try custom hook first
 		if (this.frm?.events.get_email_recipients) {
 			try {
-				const custom_contacts =
-					await this.frm.events.get_email_recipients(
-						this.frm,
-						"recipients",
-					);
+				const custom_contacts = await this.frm.events.get_email_recipients(this.frm, "recipients");
 				if (custom_contacts && custom_contacts.length > 0) {
 					// Ensure proper format for MultiSelect
 					contacts = custom_contacts.map((email) => ({
@@ -322,8 +297,7 @@ class ESignDialog {
 	get_cached_contact_list(txt) {
 		// Filter based on search text
 		return this.contact_list_cache.filter(
-			(contact) =>
-				!txt || contact.value.toLowerCase().includes(txt.toLowerCase()),
+			(contact) => !txt || contact.value.toLowerCase().includes(txt.toLowerCase()),
 		);
 	}
 
@@ -345,8 +319,7 @@ class ESignDialog {
 
 	update_esign_link_preview() {
 		const web_form = this.dialog.get_value("web_form");
-		const print_format =
-			this.dialog.get_value("print_format") || "Standard";
+		const print_format = this.dialog.get_value("print_format") || "Standard";
 
 		if (web_form) {
 			frappe.call({

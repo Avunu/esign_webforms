@@ -1,24 +1,46 @@
 {
-  "name": "esign",
-  "private": true,
-  "version": "0.0.1",
-  "scripts": {
-    "build": "vite build",
-    "npx-upgrade": "npx npm-check-updates -u && yarn install"
-  },
-  "dependencies": {
-    "@fontsource/caveat": "^5.2.8",
-    "@fontsource/dancing-script": "^5.2.8",
-    "@fontsource/great-vibes": "^5.2.8",
-    "@fontsource/pacifico": "^5.2.7",
-    "hast-util-to-dom": "^4.0.1",
-    "signature_pad": "^5.1.3"
-  },
-  "devDependencies": {
-    "@eslint/eslintrc": "^3.3.3",
-    "@eslint/js": "^9.39.2",
-    "eslint": "^9.39.2",
-    "globals": "^17.2.0",
-    "vite": "^7.3.1"
-  }
+	"name": "esign",
+	"version": "0.0.1",
+	"private": true,
+	"license": "MIT",
+	"author": "Avunu LLC",
+	"type": "module",
+	"scripts": {
+		"build": "vite build && node scripts/vite-register.mjs",
+		"npx-upgrade": "npx npm-check-updates -u && yarn install",
+		"format": "oxfmt",
+		"format:check": "oxfmt --check",
+		"lint": "oxlint",
+		"lint:css": "stylelint \"esign/public/**/*.scss\"",
+		"typecheck": "tsc --build tsconfig.json",
+		"lint:py": "uv run --frozen --project tools ruff check . && uv run --frozen --project tools ruff format --check .",
+		"typecheck:py": "uv run --frozen --project tools ty check --python \"${FRAPPE_BENCH_ROOT:-.frappe-nix/bench}/env\"",
+		"check": "yarn -s format:check && yarn -s lint && yarn -s lint:css && yarn -s typecheck"
+	},
+	"dependencies": {
+		"@fontsource/caveat": "^5.2.8",
+		"@fontsource/dancing-script": "^5.2.8",
+		"@fontsource/great-vibes": "^5.2.8",
+		"@fontsource/pacifico": "^5.2.7",
+		"hast-util-to-dom": "^4.0.1",
+		"signature_pad": "^5.1.3"
+	},
+	"devDependencies": {
+		"@types/node": "^26.6.4",
+		"frappe-types": "^16.5.0",
+		"oxfmt": "^0.72.0",
+		"oxlint": "^1.87.0",
+		"stylelint": "^17.16.0",
+		"stylelint-config-standard-scss": "^17.0.0",
+		"typescript": "^7.0.2",
+		"vite": "^7.3.1"
+	},
+	"engines": {
+		"node": ">=24"
+	},
+	"packageManager": "yarn@1.22.22",
+	"frappe": {
+		"major": "16",
+		"branch": "version-16"
+	}
 }

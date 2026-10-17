@@ -1,3 +1,6 @@
+// Copyright (c) 2026, Avunu LLC and contributors
+// For license information, please see license.txt
+
 import { toDom } from "./utils";
 
 /**
@@ -60,17 +63,13 @@ export async function filterAvailableFonts(fonts) {
 
 	try {
 		const localFonts = await window.queryLocalFonts();
-		const localFontNames = new Set(
-			localFonts.map((f) => f.family.toLowerCase()),
-		);
+		const localFontNames = new Set(localFonts.map((f) => f.family.toLowerCase()));
 
 		const available = [];
 		for (const font of fonts) {
 			// Use variants if provided, otherwise use the label as the variant
 			const variants = font.variants || [font.label];
-			const isAvailable = variants.some((variant) =>
-				localFontNames.has(variant.toLowerCase()),
-			);
+			const isAvailable = variants.some((variant) => localFontNames.has(variant.toLowerCase()));
 			if (isAvailable) {
 				available.push({
 					value: font.value,
@@ -144,9 +143,7 @@ export class ControlFontSelect extends frappe.ui.form.ControlData {
 		this._build_ui();
 
 		// Set initial value
-		const defaultValue =
-			this.df.default ||
-			(this._available_options[0] && this._available_options[0].value);
+		const defaultValue = this.df.default || (this._available_options[0] && this._available_options[0].value);
 		if (defaultValue) {
 			this.set_input(defaultValue);
 		}
@@ -215,12 +212,7 @@ export class ControlFontSelect extends frappe.ui.form.ControlData {
 					tagName: "button",
 					properties: {
 						type: "button",
-						className: [
-							"font-select-trigger",
-							"btn",
-							"btn-default",
-							"btn-sm",
-						],
+						className: ["font-select-trigger", "btn", "btn-default", "btn-sm"],
 						popoverTarget: popoverId,
 						popoverTargetAction: "toggle",
 					},
@@ -450,9 +442,7 @@ export class ControlFontSelect extends frappe.ui.form.ControlData {
 
 		// Clear existing options
 		while (this.options_container.firstChild) {
-			this.options_container.removeChild(
-				this.options_container.firstChild,
-			);
+			this.options_container.removeChild(this.options_container.firstChild);
 		}
 
 		// Build new options

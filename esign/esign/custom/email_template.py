@@ -1,3 +1,6 @@
+# Copyright (c) 2026, Avunu LLC and contributors
+# For license information, please see license.txt
+
 import frappe
 from frappe.email.doctype.email_template.email_template import EmailTemplate
 from frappe.types import DF
