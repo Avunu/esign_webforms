@@ -4,13 +4,13 @@
 	"compilerOptions": {
 		"composite": true
 	},
-	"include": ["esign/**/*.js", "types/doctypes.d.ts", "types/esign.augment.d.ts"],
+	"include": ["esign_webforms/**/*.js", "types/doctypes.d.ts", "types/esign_webforms.augment.d.ts"],
 	"exclude": [
 		"node_modules",
 		"**/*.bundle.js",
 		"**/public/dist/**",
-		"esign/www/**",
+		"esign_webforms/www/**",
 		"**/web_form/**",
-		"esign/templates/**"
+		"esign_webforms/templates/**"
 	]
 }

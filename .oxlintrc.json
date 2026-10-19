@@ -28,7 +28,7 @@
 		"unicorn/no-array-sort": "off"
 	},
 	"ignorePatterns": [
-		"esign/public/dist/**",
+		"esign_webforms/public/dist/**",
 		".frappe-nix/**",
 		".dev-dist/**",
 		"nix/**",
@@ -48,13 +48,13 @@
 			}
 		},
 		{
-			"files": ["esign/public/js/*.bundle.ts", "esign/public/js/*.bundle.js"],
+			"files": ["esign_webforms/public/js/*.bundle.ts", "esign_webforms/public/js/*.bundle.js"],
 			"rules": {
 				"import/no-unassigned-import": "off"
 			}
 		},
 		{
-			"files": ["esign/public/js/web_form.js"],
+			"files": ["esign_webforms/public/js/web_form.js"],
 			"globals": {
 				"frappe": "readonly",
 				"__": "readonly",

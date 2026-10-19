@@ -140,7 +140,7 @@ class EsignWebForm(BaseWebForm):
 	Frappe composes the final controller from the stock WebForm and every installed app's
 	extension (payments registers one too), so this subclasses the stock WebForm only:
 	subclassing another app's extension would break the class hierarchy whenever that app is
-	installed after esign.
+	installed after esign_webforms.
 	"""
 
 	# Custom fields from ../custom/web_form.json
@@ -287,17 +287,17 @@ class EsignWebForm(BaseWebForm):
 		# Include eSign assets
 		context.web_include_css.extend(
 			[
-				"esign.control.bundle.css",
-				"esign.web.bundle.css",
+				"esign_webforms.control.bundle.css",
+				"esign_webforms.web.bundle.css",
 				"esign-fonts.bundle.css",
 			]
 		)
 		context.web_include_js.extend(
 			[
-				"esign.web.bundle.js",
+				"esign_webforms.web.bundle.js",
 			]
 		)
-		context.template = "esign/templates/esign.html"
+		context.template = "esign_webforms/templates/esign_webforms.html"
 		if self.esign_force_mobile:
 			context.force_mobile = True
 			context.qrcode_svg = get_qr_svg_code(frappe.request.url).decode()
@@ -321,7 +321,7 @@ class EsignWebForm(BaseWebForm):
 					}
 				)
 				context.signed_pdf_url = (
-					f"/api/method/esign.esign.custom.web_form.download_signed_pdf?{params}"
+					f"/api/method/esign_webforms.esign.custom.web_form.download_signed_pdf?{params}"
 				)
 				context.signed_pdf_name = signed_pdf.get("file_name")
 

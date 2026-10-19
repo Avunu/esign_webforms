@@ -6,12 +6,12 @@
 	"packages": {
 		".": {
 			"release-type": "node",
-			"package-name": "esign",
+			"package-name": "esign-webforms",
 			"changelog-path": "CHANGELOG.md",
 			"extra-files": [
 				{
 					"type": "generic",
-					"path": "esign/__init__.py"
+					"path": "esign_webforms/__init__.py"
 				}
 			]
 		}

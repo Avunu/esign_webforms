@@ -144,7 +144,7 @@ def send_esign_email(
 	frappe.has_permission(doctype, ptype="email", doc=name, throw=True)
 
 	# Validate web form
-	from esign.esign.custom.web_form import EsignWebForm, get_esign_link
+	from esign_webforms.esign.custom.web_form import EsignWebForm, get_esign_link
 
 	try:
 		web_form_doc = EsignWebForm("Web Form", web_form)

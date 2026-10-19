@@ -1,7 +1,7 @@
 <!-- Copyright (c) 2026, Avunu LLC and contributors
 For license information, please see license.txt-->
 
-# eSign
+# Webform eSignatures
 
 Collect Electronic Signatures on Frappe Documents via Web Forms.
 
@@ -62,8 +62,8 @@ You can install this app using the [bench](https://github.com/frappe/bench) CLI:
 
 ```bash
 cd $PATH_TO_YOUR_BENCH
-bench get-app Avunu/esign
-bench install-app esign
+bench get-app Avunu/esign_webforms
+bench install-app esign_webforms
 ```
 
 ## Contributing
@@ -71,7 +71,7 @@ bench install-app esign
 This app uses `pre-commit` for code formatting and linting. Please [install pre-commit](https://pre-commit.com/#installation) and enable it for this repository:
 
 ```bash
-cd apps/esign
+cd apps/esign_webforms
 pre-commit install
 ```
 

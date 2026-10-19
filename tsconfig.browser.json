@@ -6,6 +6,6 @@
 		"types": ["frappe-types/global"],
 		"allowImportingTsExtensions": true
 	},
-	"include": ["esign/public/js/**/*.ts", "esign/public/js/**/*.d.ts", "types/**/*.d.ts"],
-	"exclude": ["node_modules", "esign/public/dist"]
+	"include": ["esign_webforms/public/js/**/*.ts", "esign_webforms/public/js/**/*.d.ts", "types/**/*.d.ts"],
+	"exclude": ["node_modules", "esign_webforms/public/dist"]
 }

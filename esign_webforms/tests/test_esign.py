@@ -13,17 +13,17 @@ from frappe.core.doctype.file.file import File
 from frappe.model.base_document import get_controller
 from frappe.tests import IntegrationTestCase
 
-from esign.config import (
+from esign_webforms.config import (
 	add_field_options,
 	after_install,
 	after_migrate,
 	after_uninstall,
 	revert_field_options,
 )
-from esign.esign import can_esign, get_timeline_content, send_esign_email
-from esign.esign.custom.email_template import EsignEmailTemplate, get_esign_email_templates
-from esign.esign.custom.web_form import EsignWebForm
-from esign.tests.utils import (
+from esign_webforms.esign import can_esign, get_timeline_content, send_esign_email
+from esign_webforms.esign.custom.email_template import EsignEmailTemplate, get_esign_email_templates
+from esign_webforms.esign.custom.web_form import EsignWebForm
+from esign_webforms.tests.utils import (
 	OUTSIDER,
 	TEST_DOCTYPE,
 	ensure_test_doctype,
@@ -54,12 +54,12 @@ class EsignDeskTestCase(IntegrationTestCase):
 
 class TestHooks(EsignDeskTestCase):
 	def test_controllers_are_extended_not_overridden(self):
-		hooks = frappe.get_hooks(app_name="esign")
+		hooks = frappe.get_hooks(app_name="esign_webforms")
 		self.assertEqual(
 			hooks["extend_doctype_class"],
 			{
-				"Web Form": ["esign.esign.custom.web_form.EsignWebForm"],
-				"Email Template": ["esign.esign.custom.email_template.EsignEmailTemplate"],
+				"Web Form": ["esign_webforms.esign.custom.web_form.EsignWebForm"],
+				"Email Template": ["esign_webforms.esign.custom.email_template.EsignEmailTemplate"],
 			},
 		)
 		self.assertNotIn("override_doctype_class", hooks)
@@ -67,15 +67,21 @@ class TestHooks(EsignDeskTestCase):
 		self.assertTrue(issubclass(get_controller("Email Template"), EsignEmailTemplate))
 
 	def test_assets_are_named_as_their_bundles(self):
-		hooks = frappe.get_hooks(app_name="esign")
+		hooks = frappe.get_hooks(app_name="esign_webforms")
 		# .js entry names: --using-cached keys assets.json by the built file name, always .js.
-		self.assertEqual(hooks["app_include_js"], ["esign.desk.bundle.js", "esign.control.bundle.js"])
-		self.assertEqual(hooks["app_include_css"], ["esign.control.bundle.css", "esign-fonts.bundle.css"])
+		self.assertEqual(
+			hooks["app_include_js"], ["esign_webforms.desk.bundle.js", "esign_webforms.control.bundle.js"]
+		)
+		self.assertEqual(
+			hooks["app_include_css"], ["esign_webforms.control.bundle.css", "esign-fonts.bundle.css"]
+		)
 
 	def test_jinja_and_timeline_hooks(self):
-		hooks = frappe.get_hooks(app_name="esign")
-		self.assertIn("esign.esign.custom.web_form.get_esign_link", hooks["jinja"]["methods"])
-		self.assertEqual(hooks["additional_timeline_content"]["*"], ["esign.esign.get_timeline_content"])
+		hooks = frappe.get_hooks(app_name="esign_webforms")
+		self.assertIn("esign_webforms.esign.custom.web_form.get_esign_link", hooks["jinja"]["methods"])
+		self.assertEqual(
+			hooks["additional_timeline_content"]["*"], ["esign_webforms.esign.get_timeline_content"]
+		)
 
 	def test_esign_link_in_a_template(self):
 		html = frappe.render_template(
@@ -95,7 +101,7 @@ class TestCanEsign(EsignDeskTestCase):
 
 		def get_hooks(hook: str | None = None, *args: Any, **kwargs: Any):
 			if hook == "can_esign":
-				return {TEST_DOCTYPE: ["esign.tests.utils.allow_esign"]}
+				return {TEST_DOCTYPE: ["esign_webforms.tests.utils.allow_esign"]}
 			return real_get_hooks(hook, *args, **kwargs)
 
 		with patch("frappe.get_hooks", side_effect=get_hooks):
@@ -138,7 +144,7 @@ class TestSendEsignEmail(EsignDeskTestCase):
 
 	def test_link_already_in_the_message_is_not_added_again(self):
 		link = "https://example.com/already-there"
-		with patch("esign.esign.custom.web_form.get_esign_link", return_value=link):
+		with patch("esign_webforms.esign.custom.web_form.get_esign_link", return_value=link):
 			result = self.send(message=f"<a href='{link}'>sign</a>", recipients=["signer@example.com"])
 		content = frappe.db.get_value("Communication", result["communication"], "content")
 		self.assertEqual(content.count(link), 1)
@@ -166,7 +172,7 @@ class TestSendEsignEmail(EsignDeskTestCase):
 
 	def test_failed_link_is_refused(self):
 		with (
-			patch("esign.esign.custom.web_form.get_esign_link", return_value=""),
+			patch("esign_webforms.esign.custom.web_form.get_esign_link", return_value=""),
 			self.assertRaises(frappe.ValidationError),
 		):
 			self.send()

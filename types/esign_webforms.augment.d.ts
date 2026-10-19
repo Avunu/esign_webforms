@@ -1,12 +1,12 @@
 // Copyright (c) 2026, Avunu LLC and contributors
 // For license information, please see license.txt
 
-// The names esign adds to frappe's namespaces and to the page, for the desk scripts and the
+// The names esign_webforms adds to frappe's namespaces and to the page, for the desk scripts and the
 // compiled bundles. A module (it imports), so the `frappe-types` block merges into the package.
 
 import type { BaseControl } from "frappe-types";
 
-/** What the eSign page template (esign/templates/esign.html) passes to the page script. */
+/** What the eSign page template (esign_webforms/templates/esign_webforms.html) passes to the page script. */
 interface EsignContext {
 	doctype: string;
 	name: string;
@@ -18,9 +18,9 @@ interface EsignContext {
 
 declare module "frappe-types" {
 	interface FrappeUiFormNamespace {
-		// app-owned: the image upload control, registered by esign's control bundles
+		// app-owned: the image upload control, registered by esign_webforms's control bundles
 		ControlUpload: typeof BaseControl;
-		// app-owned: the font picker control, registered by esign's control bundles
+		// app-owned: the font picker control, registered by esign_webforms's control bundles
 		ControlFontSelect: typeof BaseControl;
 	}
 
@@ -33,7 +33,7 @@ declare module "frappe-types" {
 }
 
 declare global {
-	/** A family the Local Font Access API reports (only the member esign reads). */
+	/** A family the Local Font Access API reports (only the member esign_webforms reads). */
 	interface LocalFontData {
 		readonly family: string;
 	}

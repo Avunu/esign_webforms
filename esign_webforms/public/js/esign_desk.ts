@@ -6,7 +6,7 @@ import type { Dialog, Form, FrappeResponse } from "frappe-types";
 // oxlint-disable-next-line import/no-unassigned-import -- registers the timeline card's microtemplate
 import "./templates/esign_timeline.html";
 
-/** A row of esign.esign.custom.web_form.get_esign_web_forms. */
+/** A row of esign_webforms.esign.custom.web_form.get_esign_web_forms. */
 interface EsignWebFormRow {
 	name: string;
 	title: string;
@@ -21,7 +21,7 @@ interface ContactOption {
 	description: string;
 }
 
-/** What esign.esign.send_esign_email returns. */
+/** What esign_webforms.esign.send_esign_email returns. */
 interface SendEsignEmailResult {
 	success: boolean;
 	message: string;
@@ -46,7 +46,7 @@ interface EsignFormEvents {
 
 $(document).on("form-refresh", function (_event: JQuery.TriggeredEvent, frm: Form) {
 	frappe
-		.call<boolean>("esign.esign.can_esign", {
+		.call<boolean>("esign_webforms.esign.can_esign", {
 			doctype: frm.doctype,
 			doc: frm.doc,
 		})
@@ -224,7 +224,7 @@ class ESignDialog {
 		await this.load_contact_list_cache();
 
 		frappe.call<EsignWebFormRow[]>({
-			method: "esign.esign.custom.web_form.get_esign_web_forms",
+			method: "esign_webforms.esign.custom.web_form.get_esign_web_forms",
 			args: { doctype: this.frm.doctype },
 			callback: (r) => {
 				if (r.message && r.message.length > 0) {
@@ -382,7 +382,7 @@ class ESignDialog {
 
 		if (web_form) {
 			frappe.call<string>({
-				method: "esign.esign.custom.web_form.get_esign_link",
+				method: "esign_webforms.esign.custom.web_form.get_esign_link",
 				args: {
 					doc: this.frm.doc,
 					web_form_name: web_form,
@@ -408,7 +408,7 @@ class ESignDialog {
 
 	send_esign_request(values: Record<string, unknown>): void {
 		frappe.call<SendEsignEmailResult>({
-			method: "esign.esign.send_esign_email",
+			method: "esign_webforms.esign.send_esign_email",
 			args: {
 				doctype: this.frm.doctype,
 				name: this.frm.doc.name,
