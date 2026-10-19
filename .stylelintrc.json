@@ -1,4 +1,4 @@
 {
 	"extends": ["stylelint-config-standard-scss"],
-	"ignoreFiles": ["esign/public/dist/**"]
+	"ignoreFiles": ["esign_webforms/public/dist/**"]
 }

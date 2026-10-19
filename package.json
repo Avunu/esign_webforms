@@ -1,5 +1,5 @@
 {
-	"name": "esign",
+	"name": "esign_webforms",
 	"version": "0.0.1",
 	"private": true,
 	"license": "MIT",
@@ -11,7 +11,7 @@
 		"format": "oxfmt",
 		"format:check": "oxfmt --check",
 		"lint": "oxlint",
-		"lint:css": "stylelint \"esign/public/**/*.scss\"",
+		"lint:css": "stylelint \"esign_webforms/public/**/*.scss\"",
 		"typecheck": "tsc --build tsconfig.json",
 		"lint:py": "uv run --frozen --project tools ruff check . && uv run --frozen --project tools ruff format --check .",
 		"typecheck:py": "uv run --frozen --project tools ty check --python \"${FRAPPE_BENCH_ROOT:-.frappe-nix/bench}/env\"",

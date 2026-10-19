@@ -70,7 +70,7 @@ repos:
       - id: stylelint
         name: stylelint
         language: system
-        entry: yarn -s stylelint "esign/public/**/*.scss"
+        entry: yarn -s stylelint "esign_webforms/public/**/*.scss"
         pass_filenames: false
         types: [scss]
       - id: zizmor
@@ -141,7 +141,7 @@ repos:
         args: ["."]
       - id: validate_doctype_python_types
       - id: validate_copyright
-        args: [--app, esign]
+        args: [--app, esign_webforms]
         # Never stamp a managed file (its header is line 1, or it is the profile's), or a generated one (its
         # freshness diff would fail), nor a script: a stamp above `#!/usr/bin/env node` breaks it (scripts/ and
         # ci/ hold the node tools).

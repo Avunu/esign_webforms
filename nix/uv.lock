@@ -4,8 +4,8 @@ requires-python = "==3.14.*"
 
 [manifest]
 members = [
-    "esign",
-    "esign-bench",
+    "esign-webforms",
+    "esign-webforms-bench",
     "frappe",
 ]
 overrides = [
@@ -508,11 +508,11 @@ wheels = [
 ]
 
 [[package]]
-name = "esign"
-source = { editable = "apps/esign" }
+name = "esign-webforms"
+source = { editable = "apps/esign_webforms" }
 
 [[package]]
-name = "esign-bench"
+name = "esign-webforms-bench"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

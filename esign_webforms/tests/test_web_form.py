@@ -13,8 +13,8 @@ from frappe.model.meta import Meta
 from frappe.tests import IntegrationTestCase
 from frappe.website.serve import get_response_content
 
-from esign.esign.custom import web_form as esign_web_form
-from esign.esign.custom.web_form import (
+from esign_webforms.esign.custom import web_form as esign_web_form
+from esign_webforms.esign.custom.web_form import (
 	AuditData,
 	EsignWebForm,
 	RequestData,
@@ -28,7 +28,7 @@ from esign.esign.custom.web_form import (
 	record_signature,
 	validate_esign_key,
 )
-from esign.tests.utils import (
+from esign_webforms.tests.utils import (
 	OUTSIDER,
 	PLACEHOLDER_SIGNATURE,
 	SIGNATURE,
@@ -218,7 +218,7 @@ class TestSigningPage(EsignTestCase):
 		self.assertIn(f'web_form: "{self.web_form_name}"', content)
 		self.assertIn('print_format: "Standard"', content)
 		self.assertIn("signer@example.com", content)
-		self.assertIn("esign.web.bundle.js", content)
+		self.assertIn("esign_webforms.web.bundle.js", content)
 		self.assertIn("esign-fonts.bundle.css", content)
 		self.assertIn("frappe.utils.print_format.download_pdf", content)
 		self.assertNotIn("esign-completed", content)
@@ -254,7 +254,7 @@ class TestSigningPage(EsignTestCase):
 		content = self.render(key=self.key)
 
 		self.assertIn("esign-completed", content)
-		self.assertIn("esign.esign.custom.web_form.download_signed_pdf", content)
+		self.assertIn("esign_webforms.esign.custom.web_form.download_signed_pdf", content)
 		self.assertIn(f"docname={self.doc.name}", content)
 		self.assertIn(f"web_form={self.web_form_name}", content)
 

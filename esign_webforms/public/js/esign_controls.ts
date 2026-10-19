@@ -4,7 +4,7 @@
 /**
  * eSign Control Bundle (Desk)
  *
- * Loaded through esign.control.bundle.js (app_include_js) and runs on the desk/backend.
+ * Loaded through esign_webforms.control.bundle.js (app_include_js) and runs on the desk/backend.
  * At this point frappe.ui.form is guaranteed to be available, so no polling needed.
  */
 import { ControlUpload } from "./controls/upload";

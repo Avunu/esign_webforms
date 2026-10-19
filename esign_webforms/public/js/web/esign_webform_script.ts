@@ -16,7 +16,7 @@ import WebForm from "frappe/public/js/frappe/web_form/web_form";
 import { ControlSignature } from "../controls/signature";
 import { ControlUpload } from "../controls/upload";
 
-/** What esign.esign.custom.web_form.get_print_html returns. */
+/** What esign_webforms.esign.custom.web_form.get_print_html returns. */
 interface PrintHtmlResponse {
 	print_html: string;
 	print_style: string;
@@ -101,7 +101,7 @@ function loadPrintHtml(): Promise<void> {
 	// Promise.resolve adopts the jqXHR, so callers get a standard promise.
 	return Promise.resolve(
 		frappe.call<PrintHtmlResponse>({
-			method: "esign.esign.custom.web_form.get_print_html",
+			method: "esign_webforms.esign.custom.web_form.get_print_html",
 			args: {
 				doctype: ctx.doctype,
 				docname: ctx.name,
@@ -255,7 +255,7 @@ class EsignWebForm extends WebForm {
 	override save(): false {
 		// Use eSign accept endpoint if esign_enabled, otherwise use default
 		let method = this.esign_enabled
-			? "esign.esign.custom.web_form.accept"
+			? "esign_webforms.esign.custom.web_form.accept"
 			: "frappe.website.doctype.web_form.web_form.accept";
 
 		let is_new = this.is_new;

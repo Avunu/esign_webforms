@@ -77,7 +77,7 @@ def add_communication_types():
 
 
 def after_install():
-	"""Run after esign app is installed."""
+	"""Run after esign_webforms app is installed."""
 	add_communication_types()
 
 
