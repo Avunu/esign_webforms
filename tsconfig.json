@@ -6,6 +6,9 @@
 			"path": "./tsconfig.browser.json"
 		},
 		{
+			"path": "./tsconfig.scripts.json"
+		},
+		{
 			"path": "./tsconfig.desk.json"
 		}
 	]

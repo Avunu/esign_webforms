@@ -1,0 +1,10 @@
+# The app's registry listing (docs/app-standards/marketplace.md); frappe-listing check validates it.
+schema = 1
+title = "eSign Web Forms"
+tagline = "Electronic signatures on Frappe documents through web forms, with signed PDFs"
+type = "extension"
+category = "Extensions"
+categories = ["Documents", "Productivity"]
+website = "https://avunu.net/open-source/esign_webforms/"
+documentation = "https://docs.avunu.net/esign-webforms/"
+apps_screen = false
