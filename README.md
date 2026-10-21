@@ -40,7 +40,7 @@ It works with any DocType, standard or custom, that has a Signature field and a 
 - **Audit trail in the timeline.** Each signing creates an eSign Communication with the signer's email, IP address and browser, the time, the web form, the print format, the fields signed and the PDF hash. It shows as a card in the document timeline with links to open and download the signed PDF.
 - **Actions after signing.** A web form can set a field to a value (for example, **Status** to "Signed"), submit the document, and send a Notification with the signed PDF attached and the audit trail added to the email.
 - **Completed documents.** Once every signature field on the form is filled, the signing page shows a **Document Signed** card instead of the form, with the signed PDF and a download button once the PDF exists.
-- **Touch-screen only signing.** **Only allow Signing on Mobile** hides the form on large screens and shows a QR code that opens the same page on a phone.
+- **Signing on a phone.** **Only allow Signing on Mobile** hides the form on large screens and shows a QR code that opens the same page on a phone.
 - **cloud_storage support.** With the cloud_storage app, the signed PDF is linked to the eSign record instead of copied, and guest downloads go through a sharing link.
 
 <!-- frappe-nix:begin compatibility -->
@@ -73,12 +73,13 @@ Until the first release creates the `version-16` branch, install from `develop` 
 ## Configuration
 
 1. **The DocType.** Give the DocType you want signed a **Signature** field. To sign documents that are already submitted, tick **Allow on Submit** on the Signature field and on every other field the web form changes.
-2. **The web form.** Create a **Web Form** for the DocType and tick **Enable eSign**. Add the Signature field, and any fields the signer should fill in, such as their name. To record the signer's email in the audit trail, add a Data field whose options are `Email`. The **eSign Settings** section then offers:
-   - **Print Format**: the format of the preview and of the signed PDF.
-   - **Submit on Response**: submit the document when it is signed (submittable DocTypes only).
-   - **Set Property After Response** and **Value To Be Set**: set a Select, Link, Data or Text field to a value when the document is signed.
-   - **Only allow Signing on Mobile**: show a QR code instead of the form on large screens.
-   - **Send Notification on Response** and **Notification**: send an enabled Notification of this DocType whose event is **Custom** and whose channel is **Email**, with the signed PDF attached.
+2. **The web form.** Create a **Web Form** for the DocType and tick **Enable eSign**. Add the Signature field, and any fields the signer should fill in, such as their name. To record the signer's email in the audit trail, add a Data field whose options are `Email`. Then set:
+   - **Print Format**, the web form's own field, which shows once eSign is enabled: the format of the preview and of the signed PDF.
+   - In the **eSign Settings** section:
+     - **Submit on Response**: submit the document when it is signed (submittable DocTypes only).
+     - **Set Property After Response** and **Value To Be Set**: set a Select, Link, Data or Text field to a value when the document is signed.
+     - **Only allow Signing on Mobile**: show a QR code instead of the form on large screens.
+   - In the **Notification Settings** section, **Send Notification on Response** and **Notification**: send an enabled Notification of this DocType whose event is **Custom** and whose channel is **Email**, with the signed PDF attached.
 
    Enabling eSign also turns on **Allow Editing After Submit** for the web form, which the signing page needs.
 
@@ -115,7 +116,7 @@ The signed PDF and the timeline entry are written by background jobs on the `sho
 - **A form with no Signature field never shows as completed,** and a document whose signature fields are already filled opens as completed even if it was not signed through the app.
 - **Only allow Signing on Mobile** goes by screen width, not by touch support: the form is hidden on large screens and shown on small ones.
 - **Notifications** are sent only for an enabled Notification of the web form's DocType, with the **Custom** event and the **Email** channel. Others are skipped and an error is logged.
-- **Set Property After Response** only sets Select, Link, Data and Text fields.
+- **Set Property After Response** lists every field of the DocType, but only a Select, Link, Data or Text field is set; a value for any other field is ignored without an error.
 - **Old method paths.** Calls to the `esign.*` method paths of the app's earlier name still work through `override_whitelisted_methods`. They will be removed in a later release.
 
 <!-- frappe-nix:begin support -->
