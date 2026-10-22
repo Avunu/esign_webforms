@@ -276,21 +276,19 @@ class TestTimeline(EsignDeskTestCase):
 		self.assertEqual(data["signed_fields"], [escaped])
 		self.assertIsNone(data["timestamp"])
 
-	def test_timeline_icons_are_defined_once_in_the_desk_sprites(self):
-		# A <use> of an id the desk's sprites define twice draws the first one, which may not
-		# be drawn for the classes on the card (espresso's es-line-download showed as a dot).
-		sprites = ""
-		for url in frappe.get_hooks("app_include_icons"):
-			app, _, path = url.removeprefix("/assets/").partition("/")
-			with open(frappe.get_app_path(app, "public", path)) as f:
-				sprites += f.read()
+	def test_timeline_icons_are_drawn_in_the_theme_colour(self):
+		# Frappe colours an icon through its "icon" class; espresso's es-line-* symbols have no
+		# colour of their own (the link icon was black on the dark theme), and a <use> of an id
+		# the desk's sprites define twice draws the first one (es-line-download showed as a dot).
 		with open(
 			frappe.get_app_path("esign_webforms", "public", "js", "templates", "esign_timeline.html")
 		) as f:
-			icons = re.findall(r'<use href="#([^"]+)"', f.read())
-		self.assertTrue(icons)
-		for icon in icons:
-			self.assertEqual(sprites.count(f'id="{icon}"'), 1, icon)
+			icons = re.findall(r'<svg class="([^"]*)">\s*<use href="#([^"]+)"', f.read())
+		self.assertEqual(len(icons), 2)
+		for classes, icon in icons:
+			self.assertIn("icon", classes.split(), icon)
+			self.assertTrue(icon.startswith("icon-"), icon)
+			self.assertEqual(desk_sprite_definitions(icon), 1, icon)
 
 
 class TestEmailTemplate(EsignDeskTestCase):
@@ -367,3 +365,13 @@ class TestInstall(EsignDeskTestCase):
 		self.assertFalse(
 			frappe.db.exists("Property Setter", {"doc_type": TEST_DOCTYPE, "field_name": "no_such_field"})
 		)
+
+
+def desk_sprite_definitions(icon: str) -> int:
+	"""How many times the desk's icon sprites (app_include_icons) define the symbol id."""
+	count = 0
+	for url in frappe.get_hooks("app_include_icons"):
+		app, _, path = url.removeprefix("/assets/").partition("/")
+		with open(frappe.get_app_path(app, "public", path)) as f:
+			count += f.read().count(f'id="{icon}"')
+	return count
