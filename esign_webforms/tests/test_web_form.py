@@ -99,6 +99,17 @@ class TestEsignWebFormController(EsignTestCase):
 		plain = cast(EsignWebForm, make_web_form(esign_enabled=0, allow_edit=0))
 		self.assertFalse(plain.allow_edit)
 
+	def test_update_field_must_be_a_type_accept_sets(self):
+		wf = self.reload_web_form()
+		wf.esign_update_field = "rating"
+		with self.assertRaises(frappe.ValidationError):
+			wf.save(ignore_permissions=True)
+
+		wf = self.reload_web_form()
+		wf.esign_update_field = "status"
+		wf.save(ignore_permissions=True)
+		self.assertEqual(self.reload_web_form().esign_update_field, "status")
+
 	def test_signature_exists_only_when_every_signature_field_is_signed(self):
 		wf = self.reload_web_form()
 		self.assertFalse(wf._check_signature_exists(self.doc))
