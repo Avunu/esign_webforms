@@ -4,6 +4,7 @@
 """The desk side: sending a document for signature, the timeline, the hooks and install."""
 
 import json
+import re
 from typing import Any, cast
 from unittest.mock import patch
 
@@ -274,6 +275,22 @@ class TestTimeline(EsignDeskTestCase):
 			self.assertEqual(data[key], escaped, key)
 		self.assertEqual(data["signed_fields"], [escaped])
 		self.assertIsNone(data["timestamp"])
+
+	def test_timeline_icons_are_defined_once_in_the_desk_sprites(self):
+		# A <use> of an id the desk's sprites define twice draws the first one, which may not
+		# be drawn for the classes on the card (espresso's es-line-download showed as a dot).
+		sprites = ""
+		for url in frappe.get_hooks("app_include_icons"):
+			app, _, path = url.removeprefix("/assets/").partition("/")
+			with open(frappe.get_app_path(app, "public", path)) as f:
+				sprites += f.read()
+		with open(
+			frappe.get_app_path("esign_webforms", "public", "js", "templates", "esign_timeline.html")
+		) as f:
+			icons = re.findall(r'<use href="#([^"]+)"', f.read())
+		self.assertTrue(icons)
+		for icon in icons:
+			self.assertEqual(sprites.count(f'id="{icon}"'), 1, icon)
 
 
 class TestEmailTemplate(EsignDeskTestCase):
