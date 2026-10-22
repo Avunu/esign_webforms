@@ -153,11 +153,6 @@ def send_esign_email(
 	except frappe.DoesNotExistError:
 		frappe.throw(_("Web Form {0} not found").format(web_form))
 
-	# Generate eSign link
-	esign_link = get_esign_link(doc, web_form, print_format or "")
-	if not esign_link:
-		frappe.throw(_("Failed to generate eSign link"))
-
 	# Process recipients
 	recipients_list = []
 	if isinstance(recipients, str):
@@ -167,6 +162,14 @@ def send_esign_email(
 
 	if not recipients_list:
 		frappe.throw(_("No valid recipients provided"))
+
+	# Generate eSign link. With a single recipient, the link carries their address so the
+	# signing page pre-fills it and the audit trail records them as the signer; one link sent
+	# to several recipients cannot name the one who signs.
+	recipient_email = recipients_list[0] if len(recipients_list) == 1 else ""
+	esign_link = get_esign_link(doc, web_form, print_format or "", recipient_email)
+	if not esign_link:
+		frappe.throw(_("Failed to generate eSign link"))
 
 	# Process CC and BCC
 	cc_list = []

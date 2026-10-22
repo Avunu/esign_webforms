@@ -142,6 +142,15 @@ class TestSendEsignEmail(EsignDeskTestCase):
 		self.assertTrue(mail["now"])
 		self.assertIn(result["esign_link"], mail["content"])
 
+	def test_link_names_a_single_recipient(self):
+		result = self.send(recipients="Signer+1@example.com")
+		self.assertIn("&email=Signer%2B1%40example.com", result["esign_link"])
+		self.assertIn(result["esign_link"], self.sendmail.call_args.kwargs["content"])
+
+	def test_link_to_several_recipients_names_none(self):
+		result = self.send()
+		self.assertNotIn("&email=", result["esign_link"])
+
 	def test_link_already_in_the_message_is_not_added_again(self):
 		link = "https://example.com/already-there"
 		with patch("esign_webforms.esign.custom.web_form.get_esign_link", return_value=link):
