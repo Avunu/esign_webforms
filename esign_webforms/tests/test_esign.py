@@ -147,6 +147,10 @@ class TestSendEsignEmail(EsignDeskTestCase):
 		self.assertIn("&email=Signer%2B1%40example.com", result["esign_link"])
 		self.assertIn(result["esign_link"], self.sendmail.call_args.kwargs["content"])
 
+	def test_link_names_only_the_address_of_a_named_recipient(self):
+		result = self.send(recipients="Dana Signer <dana@example.com>")
+		self.assertTrue(result["esign_link"].endswith("&email=dana%40example.com"))
+
 	def test_link_to_several_recipients_names_none(self):
 		result = self.send()
 		self.assertNotIn("&email=", result["esign_link"])
