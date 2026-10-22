@@ -199,6 +199,16 @@ class TestSendEsignEmail(EsignDeskTestCase):
 			self.send()
 
 
+def desk_sprite_definitions(icon: str) -> int:
+	"""How many times the desk's icon sprites (app_include_icons) define the symbol id."""
+	count = 0
+	for url in frappe.get_hooks("app_include_icons"):
+		app, _, path = url.removeprefix("/assets/").partition("/")
+		with open(frappe.get_app_path(app, "public", path)) as f:
+			count += f.read().count(f'id="{icon}"')
+	return count
+
+
 class TestTimeline(EsignDeskTestCase):
 	def test_esign_communications_become_timeline_cards(self):
 		audit = {"signer_name": "Sam Signer", "signer_email": "sam@example.com", "pdf_hash": "ab" * 32}
@@ -365,13 +375,3 @@ class TestInstall(EsignDeskTestCase):
 		self.assertFalse(
 			frappe.db.exists("Property Setter", {"doc_type": TEST_DOCTYPE, "field_name": "no_such_field"})
 		)
-
-
-def desk_sprite_definitions(icon: str) -> int:
-	"""How many times the desk's icon sprites (app_include_icons) define the symbol id."""
-	count = 0
-	for url in frappe.get_hooks("app_include_icons"):
-		app, _, path = url.removeprefix("/assets/").partition("/")
-		with open(frappe.get_app_path(app, "public", path)) as f:
-			count += f.read().count(f'id="{icon}"')
-	return count
