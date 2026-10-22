@@ -7,7 +7,7 @@
 		"readme": "feature",
 		"width": 2880,
 		"height": 1800,
-		"sha256": "5fed1bdc15d4dc531e2a1aa43472e24f288cc71d251b886e32543f29c42f50ae"
+		"sha256": "bd6a91fb9e16bac8bd6edecda59d01a635af43a9ca798777c459856bb4a6e7de"
 	},
 	{
 		"name": "audit-trail",
@@ -17,7 +17,7 @@
 		"readme": "feature",
 		"width": 2880,
 		"height": 1800,
-		"sha256": "ed80a71186cce9277cf9a69bc901a64324c6896b82e5c59dd968be9b5ad3988b"
+		"sha256": "dad94cc41f84272dd348684a0fad913c2d3f6331ba6a7a0e9e703084504eae16"
 	},
 	{
 		"name": "send-for-esign",

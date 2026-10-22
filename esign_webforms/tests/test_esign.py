@@ -4,6 +4,7 @@
 """The desk side: sending a document for signature, the timeline, the hooks and install."""
 
 import json
+import re
 from typing import Any, cast
 from unittest.mock import patch
 
@@ -211,6 +212,16 @@ class TestSendEsignEmail(EsignDeskTestCase):
 			self.send()
 
 
+def desk_sprite_definitions(icon: str) -> int:
+	"""How many times the desk's icon sprites (app_include_icons) define the symbol id."""
+	count = 0
+	for url in frappe.get_hooks("app_include_icons"):
+		app, _, path = url.removeprefix("/assets/").partition("/")
+		with open(frappe.get_app_path(app, "public", path)) as f:
+			count += f.read().count(f'id="{icon}"')
+	return count
+
+
 class TestTimeline(EsignDeskTestCase):
 	def test_esign_communications_become_timeline_cards(self):
 		audit = {"signer_name": "Sam Signer", "signer_email": "sam@example.com", "pdf_hash": "ab" * 32}
@@ -287,6 +298,20 @@ class TestTimeline(EsignDeskTestCase):
 			self.assertEqual(data[key], escaped, key)
 		self.assertEqual(data["signed_fields"], [escaped])
 		self.assertIsNone(data["timestamp"])
+
+	def test_timeline_icons_are_drawn_in_the_theme_colour(self):
+		# Frappe colours an icon through its "icon" class; espresso's es-line-* symbols have no
+		# colour of their own (the link icon was black on the dark theme), and a <use> of an id
+		# the desk's sprites define twice draws the first one (es-line-download showed as a dot).
+		with open(
+			frappe.get_app_path("esign_webforms", "public", "js", "templates", "esign_timeline.html")
+		) as f:
+			icons = re.findall(r'<svg class="([^"]*)">\s*<use href="#([^"]+)"', f.read())
+		self.assertEqual(len(icons), 2)
+		for classes, icon in icons:
+			self.assertIn("icon", classes.split(), icon)
+			self.assertTrue(icon.startswith("icon-"), icon)
+			self.assertEqual(desk_sprite_definitions(icon), 1, icon)
 
 
 class TestEmailTemplate(EsignDeskTestCase):
