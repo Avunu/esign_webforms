@@ -25,6 +25,10 @@ from frappe.utils import cint, escape_html, get_frappe_version, now, validate_em
 from frappe.website.doctype.web_form.web_form import WebForm as BaseWebForm
 from frappe.www.printview import validate_print_permission
 
+# The field types "Set Property After Response" (esign_update_field) can set; web_form.js
+# offers only these.
+UPDATE_FIELD_TYPES = ("Select", "Link", "Data", "Text")
+
 
 class PrintHtmlResponse(TypedDict):
 	"""Response from get_print_html endpoint."""
@@ -335,6 +339,21 @@ class EsignWebForm(BaseWebForm):
 		# if esign is enabled, force allow_edit
 		if self.esign_enabled:
 			self.allow_edit = True
+			self.validate_update_field()
+
+	def validate_update_field(self):
+		"""Refuse a Set Property After Response field that accept would not set."""
+		if not self.esign_update_field or not self.doc_type:
+			return
+		df = frappe.get_meta(self.doc_type).get_field(self.esign_update_field)
+		if df and df.fieldtype not in UPDATE_FIELD_TYPES:
+			frappe.throw(
+				_("Set Property After Response can only set a {0} field, not {1} ({2}).").format(
+					", ".join(_(fieldtype) for fieldtype in UPDATE_FIELD_TYPES),
+					_(df.label or df.fieldname),
+					_(df.fieldtype),
+				)
+			)
 
 	def has_web_form_permission(self, doctype, name, ptype="read"):
 		"""Override to allow eSign access for Guest users with valid keys"""
@@ -1282,7 +1301,7 @@ def accept(web_form: str, data: str):
 			try:
 				if meta.has_field(wf.esign_update_field):
 					df = meta.get_field(wf.esign_update_field)
-					if df and df.fieldtype in ("Select", "Link", "Data", "Text"):
+					if df and df.fieldtype in UPDATE_FIELD_TYPES:
 						doc.set(wf.esign_update_field, wf.esign_update_value)
 			except Exception as e:
 				frappe.log_error(

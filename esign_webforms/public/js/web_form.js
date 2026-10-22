@@ -2,8 +2,14 @@
 // For license information, please see license.txt
 
 /**
- * Fill the "Set Property After Response" select with the value fields of the web form's
- * doctype.
+ * The field types "Set Property After Response" can set (UPDATE_FIELD_TYPES in
+ * esign_webforms/esign/custom/web_form.py).
+ */
+const UPDATE_FIELD_TYPES = ["Select", "Link", "Data", "Text"];
+
+/**
+ * Fill the "Set Property After Response" select with the fields of the web form's doctype that
+ * it can set.
  * @param {frappe.ui.form.Form<"Web Form">} frm
  */
 function update_field_options(frm) {
@@ -13,7 +19,7 @@ function update_field_options(frm) {
 	}
 	void frappe.model.with_doctype(doc_type, () => {
 		const fieldnames = (frappe.get_meta(doc_type)?.fields ?? [])
-			.filter((field) => !frappe.model.no_value_type.includes(field.fieldtype))
+			.filter((field) => UPDATE_FIELD_TYPES.includes(field.fieldtype))
 			.map((field) => field.fieldname);
 
 		frm.set_df_property("esign_update_field", "options", [""].concat(fieldnames));
