@@ -1,0 +1,62 @@
+[
+	{
+		"name": "audit-trail",
+		"theme": "dark",
+		"alt": "A signed agreement's timeline: the eSign card with the PDF's SHA-256 hash, the signer's email, IP address, web form, signed fields and browser",
+		"featured": true,
+		"readme": "feature",
+		"width": 2880,
+		"height": 1800,
+		"sha256": "5fed1bdc15d4dc531e2a1aa43472e24f288cc71d251b886e32543f29c42f50ae"
+	},
+	{
+		"name": "audit-trail",
+		"theme": "light",
+		"alt": "A signed agreement's timeline: the eSign card with the PDF's SHA-256 hash, the signer's email, IP address, web form, signed fields and browser",
+		"featured": true,
+		"readme": "feature",
+		"width": 2880,
+		"height": 1800,
+		"sha256": "ed80a71186cce9277cf9a69bc901a64324c6896b82e5c59dd968be9b5ad3988b"
+	},
+	{
+		"name": "send-for-esign",
+		"theme": "dark",
+		"alt": "The Send for eSign dialog on a draft agreement, with the recipient, the eSign email template, the web form and the message filled in",
+		"featured": true,
+		"readme": "feature",
+		"width": 2880,
+		"height": 1800,
+		"sha256": "0509390c83538a8b645a77fdd4eac246fb07557322b7b08976a2ac0de487e831"
+	},
+	{
+		"name": "send-for-esign",
+		"theme": "light",
+		"alt": "The Send for eSign dialog on a draft agreement, with the recipient, the eSign email template, the web form and the message filled in",
+		"featured": true,
+		"readme": "feature",
+		"width": 2880,
+		"height": 1800,
+		"sha256": "1f9e8f5cff0f7bb08db391435c4e40678158fe182008e0b26a1ea5c968ef9680"
+	},
+	{
+		"name": "signature-pad",
+		"theme": "light",
+		"alt": "The signature dialog's Draw tab with a handwritten signature, and the Type and Upload tabs beside it",
+		"featured": true,
+		"readme": "feature",
+		"width": 2880,
+		"height": 1800,
+		"sha256": "b61d5ba5433a8b3db74386a804ec5cb504a0a99aff61262176e6ac10248f8fdc"
+	},
+	{
+		"name": "signing-page",
+		"theme": "light",
+		"alt": "The signing page: the agreement in its print format, and the signer's name, email and typed signature in the form beside it",
+		"featured": true,
+		"readme": "hero",
+		"width": 2880,
+		"height": 1800,
+		"sha256": "ad20c63355074b96a34a437485334d26c189f222a79f9727968c3f4fe47b6547"
+	}
+]

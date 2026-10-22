@@ -2,9 +2,9 @@
 # For license information, please see license.txt
 
 app_name = "esign_webforms"
-app_title = "Webform eSignatures"
+app_title = "eSign Web Forms"
 app_publisher = "Avunu LLC"
-app_description = "Collect Electronic Signatures on Frappe Documents via Webforms"
+app_description = "Electronic signatures on Frappe documents through web forms, with signed PDFs"
 app_email = "mail@avu.nu"
 app_license = "MIT"
 
