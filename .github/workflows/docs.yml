@@ -21,6 +21,6 @@ jobs:
   docs:
     permissions:
       contents: read # checkout
-    uses: Avunu/site-docs/.github/workflows/check-docs.yml@a3fe0ea22e6b28e3d125a7277e9689904c491f64 # 2026-10-16
+    uses: Avunu/site-docs/.github/workflows/check-docs.yml@5c5c2bfc362107921b6899f40cf9c0c29388acc2 # 2026-10-16
     with:
       path: esign-webforms
