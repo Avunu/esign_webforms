@@ -164,7 +164,8 @@ def send_esign_email(
 		frappe.throw(_("No valid recipients provided"))
 
 	# Generate eSign link. With a single recipient, the link carries their address so the
-	# signing page pre-fills it and the audit trail records them as the signer; one link sent
+	# signing page pre-fills it (and, without a Signer Email Field on the web form, the audit
+	# trail records them as the signer); one link sent
 	# to several recipients cannot name the one who signs. Only the address is used, so a
 	# "Name <address>" recipient still pre-fills a valid email (and an invalid one names nobody).
 	recipient_email = validate_email_address(recipients_list[0]) if len(recipients_list) == 1 else ""

@@ -828,9 +828,18 @@ class TestAccept(EsignTestCase):
 	def test_signer_fields_fall_back_when_empty_or_unset(self):
 		add_signer_fields(self.reload_web_form())
 		wf = self.reload_web_form()
-		# An empty name field falls back to the User the signer's email belongs to.
+		# An empty name field does not take the name of a User whose address a guest typed:
+		# it could be anyone's.
 		self.doc.signer_name = "   "
 		self.doc.signer_email = SIGNER
+		frappe.set_user("Guest")
+		with signing_request():
+			audit = esign_web_form._collect_audit_data(self.doc, wf, "Standard")
+		self.assertEqual(audit["signer_email"], SIGNER)
+		self.assertIsNone(audit["signer_name"])
+
+		# It falls back to the User's name when that address is the logged-in user's own.
+		frappe.set_user(SIGNER)
 		with signing_request():
 			audit = esign_web_form._collect_audit_data(self.doc, wf, "Standard")
 		self.assertEqual(audit["signer_email"], SIGNER)
