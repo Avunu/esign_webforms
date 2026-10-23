@@ -81,7 +81,7 @@ Until the first release creates the `version-16` branch, install from `develop` 
      - **Set Property After Response** and **Value To Be Set**: set a Select, Link, Data or Text field to a value when the document is signed. Only those fields are offered, and saving the web form with any other field is refused.
      - **Only allow Signing on Mobile**: show a QR code instead of the form on large screens.
    - In the **Signer** section, which names the signer in the audit trail:
-     - **Signer Name Field**: the form field the signer types their name into. Its value is recorded as the signer's name.
+     - **Signer Name Field**: the form field the signer types their name into. Its value is recorded as the signer's name. Left empty, the signer is named after a User only when they are logged in as that User.
      - **Signer Email Field**: the form field the signer types their email into. A valid address in it is recorded as the signer's email, and the link's `email` parameter pre-fills it.
 
      Both offer only the web form's own Data fields, and saving the web form with any other field is refused. Make the fields mandatory on the web form if every signer must give them. When they are not set, the signer is identified as before: by the link's `email` parameter or a Data field whose options are `Email`, and named after a matching User.
@@ -104,7 +104,7 @@ The signed PDF and the timeline entry are written by background jobs on the `sho
   ```
 
 - **Steering the dialog.** A form script can define `get_email_account(frm, fieldname)` and `get_email_recipients(frm, fieldname)` form events. The dialog uses the account and the recipient list they return instead of its own defaults.
-- **Links in templates.** `get_esign_link(doc, web_form_name, print_format_name, recipient_email)` is available in Jinja (print formats, notifications, email templates) and as a whitelisted method. With `recipient_email`, the link pre-fills the form's email field and records that address as the signer's.
+- **Links in templates.** `get_esign_link(doc, web_form_name, print_format_name, recipient_email)` is available in Jinja (print formats, notifications, email templates) and as a whitelisted method. With `recipient_email`, the link pre-fills the form's email field. On a web form without a **Signer Email Field**, that address is also recorded as the signer's; with one, what the signer submits in the field is recorded.
 
 ## How It Works
 
@@ -112,7 +112,7 @@ The signed PDF and the timeline entry are written by background jobs on the `sho
 - A signing link is `/<web form route>/<document>/edit?key=<share key>`, with optional `format` (print format) and `email` parameters. The web form's `get_context` checks the key, or without one whether the logged-in user may open the document through the web form or print it, and renders the app's signing page. The page loads the document preview from `get_print_html` into a shadow root, so the print format's styles do not touch the page.
 - Signing posts the form to the app's own `accept` endpoint rather than Frappe's. It checks the share key or the user's permission, writes the form's fields, applies **Set Property After Response** and **Submit on Response**, and saves the document in one go.
 - After the save commits, `attach_print_to_document` renders and attaches the PDF. It then queues `record_signature`, which creates the eSign Communication with the audit data as JSON, attaches a copy of the PDF to it (or, with cloud_storage, an association to the same file), and sends the configured Notification. The `additional_timeline_content` hook turns each eSign Communication into the timeline card.
-- The signer's email comes from the web form's **Signer Email Field** when one is set (the link's `email` parameter only pre-fills it and is not recorded on its own), otherwise from the link's `email` parameter, then from a Data field with options `Email` on the form; failing those, from the logged-in user. Their name comes from the **Signer Name Field** when one is set and filled, otherwise from the User with the signer's email. Both are recorded in the eSign Communication (as its sender and sender name too), shown on the timeline card and added to the notification email. The IP address is read from `CF-Connecting-IP`, `X-Real-IP` or `X-Forwarded-For`, then the connection.
+- The signer's email comes from the web form's **Signer Email Field** when one is set (the link's `email` parameter only pre-fills it and is not recorded on its own), otherwise from the link's `email` parameter, then from a Data field with options `Email` on the form; failing those, from the logged-in user. Their name comes from the **Signer Name Field** when one is set and filled, otherwise from the User with the signer's email. When a Signer Name Field is set but left empty, a User's name is used only if the signer's email is the logged-in user's own, since a guest could type someone else's address. Both are recorded in the eSign Communication (as its sender and sender name too), shown on the timeline card and added to the notification email. The IP address is read from `CF-Connecting-IP`, `X-Real-IP` or `X-Forwarded-For`, then the connection.
 - `download_signed_pdf` serves the latest signed PDF to a guest with the share key, and logs the download in the Access Log.
 
 ## Limitations

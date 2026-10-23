@@ -884,8 +884,9 @@ def get_esign_link(
 		web_form_name: Name of the eSign-enabled Web Form
 		print_format_name: Optional print format override
 		recipient_email: Optional email of the intended signer; appended as
-			``&email=`` so the web form can pre-fill a Data(Email) field and
-			record the signer in the audit trail.
+			``&email=`` so the web form can pre-fill its email field. Without a
+			Signer Email Field on the web form, the audit trail also records it
+			as the signer's; with one, only what the signer submits is recorded.
 	"""
 	if isinstance(doc, str):
 		try:
@@ -1182,7 +1183,9 @@ def _collect_audit_data(doc: Document, wf: EsignWebForm, print_format: str) -> A
 
 	Signer name resolution order:
 		1. The web form's Signer Name Field (what the signer typed)
-		2. The full name of the User with the signer's email
+		2. The full name of the User with the signer's email. With a Signer Name Field set,
+		only when that email is the logged-in user's: the signer may have typed someone
+		else's address, and the form already asks for their own name.
 	"""
 	# Get IP address from various possible headers (proxy-aware)
 	ip_address = _get_client_ip()
@@ -1224,8 +1227,13 @@ def _collect_audit_data(doc: Document, wf: EsignWebForm, print_format: str) -> A
 	if signer_name:
 		signer_name = signer_name[:SIGNER_NAME_LENGTH]
 
-	# Otherwise the full name of the User the signer's email belongs to
-	if not signer_name and signer_email:
+	# Otherwise the full name of the User the signer's email belongs to. A web form with a
+	# Signer Name Field asks the signer for their name; left empty, an address they typed
+	# could name another User, so only the logged-in user's own record is used.
+	name_from_user = signer_email and (
+		not _signer_fieldname(wf, "esign_signer_name_field") or signer_email == frappe.session.user
+	)
+	if not signer_name and name_from_user:
 		try:
 			user_doc = cast(User, frappe.get_cached_doc("User", signer_email))
 			signer_name = user_doc.full_name if user_doc else None
