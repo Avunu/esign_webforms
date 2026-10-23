@@ -84,6 +84,9 @@ class TestDemo(IntegrationTestCase):
 		self.assertEqual(audit["signer_email"], demo.SIGNER_EMAIL)
 		self.assertEqual(audit["signer_name"], "Dana Whitfield")
 		self.assertEqual(audit["timestamp"], "2026-01-15 10:42:15")
+		self.assertTrue(audit["signer_email_verified"])
+		self.assertEqual(audit["verified_via"], "recipient link")
+		self.assertEqual(audit["consent_text"], "I agree to sign this document electronically.")
 		self.assertEqual(len(audit["pdf_hash"]), 64)
 
 	def test_setup_is_idempotent(self):

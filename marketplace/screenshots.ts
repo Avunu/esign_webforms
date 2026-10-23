@@ -139,6 +139,8 @@ const FILL = [
 	{
 		eval: `(() => { const c = ${SIGNATURE}; c.show_dialog(); c.select_mode("type"); c.typed_input.value = "Ana Torres"; c.update_typed_preview(); c.handle_insert(); })()`,
 	},
+	// The consent to sign electronically, which the form requires.
+	{ eval: "document.getElementById('esign-consent').checked = true" },
 	{ eval: "document.activeElement && document.activeElement.blur()" },
 	{ wait: 800 },
 ];
@@ -153,7 +155,7 @@ export default {
 			// The signing page is a website page, which has no dark theme.
 			themes: ["light"],
 			route: SIGNING_PAGE,
-			alt: "The signing page: the agreement in its print format, and the signer's name, email and typed signature in the form beside it",
+			alt: "The signing page: the agreement in its print format, and the signer's name, email, typed signature and the ticked consent to sign electronically in the form beside it",
 			waitForFn: PAGE_READY,
 			actions: [{ wait: 800 }, ...FILL],
 			// The "Signature added successfully" toast would cover the submit button.
@@ -203,7 +205,7 @@ export default {
 		{
 			name: "audit-trail",
 			route: SIGNED,
-			alt: "A signed agreement's timeline: the eSign card naming the signer, with the PDF's SHA-256 hash, the signer's email, IP address, web form, signed fields and browser",
+			alt: "A signed agreement's timeline: the eSign card naming the signer, with the PDF's SHA-256 hash, the signer's email verified via the recipient link, IP address, web form, signed fields, the consent they gave and their browser",
 			waitForFn: `${DESK_READY("DEMO-AGR-002")} && !!document.querySelector('.timeline-message-box[data-communication-type="eSign"]')`,
 			actions: [
 				{
@@ -221,7 +223,7 @@ export default {
 			// which the network wait never sees finish, so the shot opens the form from the Web
 			// Form list with a stand-in Worker: the editors work without their linting.
 			route: WEB_FORMS,
-			alt: "The eSign web form's settings: Submit on Response, Set Property After Response, and the Signer Name Field and Signer Email Field that name the form fields the audit trail records",
+			alt: "The eSign web form's settings: Submit on Response, Set Property After Response, the Signer Name Field and Signer Email Field that name the form fields the audit trail records, Require Verified Email and the Consent Text",
 			waitForFn: "!!(window.cur_list && cur_list.doctype === 'Web Form')",
 			actions: [
 				{

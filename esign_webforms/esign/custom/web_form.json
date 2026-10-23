@@ -94,10 +94,22 @@
       "name": "Web Form-esign_signer_name_field"
     },
     {
+      "default": "0",
+      "description": "Sign only through a link emailed to the signer, which binds their address to the document. The form's email field is filled from the link and cannot be changed, and the audit trail records the address as verified. Send for eSign sends each recipient their own link.",
+      "dt": "Web Form",
+      "fieldname": "esign_require_verified_email",
+      "fieldtype": "Check",
+      "insert_after": "esign_signer_name_field",
+      "is_system_generated": 0,
+      "label": "Require Verified Email",
+      "module": "eSign",
+      "name": "Web Form-esign_require_verified_email"
+    },
+    {
       "dt": "Web Form",
       "fieldname": "esign_signer_column_break",
       "fieldtype": "Column Break",
-      "insert_after": "esign_signer_name_field",
+      "insert_after": "esign_require_verified_email",
       "is_system_generated": 0,
       "module": "eSign",
       "name": "Web Form-esign_signer_column_break"
@@ -114,11 +126,22 @@
       "name": "Web Form-esign_signer_email_field"
     },
     {
+      "description": "The consent the signer ticks before signing, recorded in the audit trail. Leave empty for: I agree to sign this document electronically.",
+      "dt": "Web Form",
+      "fieldname": "esign_consent_text",
+      "fieldtype": "Small Text",
+      "insert_after": "esign_signer_email_field",
+      "is_system_generated": 0,
+      "label": "Consent Text",
+      "module": "eSign",
+      "name": "Web Form-esign_consent_text"
+    },
+    {
       "depends_on": "eval:doc.esign_enabled==1",
       "dt": "Web Form",
       "fieldname": "esign_notification_section",
       "fieldtype": "Section Break",
-      "insert_after": "esign_signer_email_field",
+      "insert_after": "esign_consent_text",
       "is_system_generated": 0,
       "label": "Notification Settings",
       "module": "eSign",

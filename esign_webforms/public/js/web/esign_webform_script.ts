@@ -270,6 +270,14 @@ class EsignWebForm extends WebForm {
 
 		if (!doc_values) return false;
 
+		// The signer's consent to sign electronically; accept refuses to sign without it.
+		const consent = document.querySelector<HTMLInputElement>("#esign-consent");
+		if (this.esign_enabled && consent && !consent.checked) {
+			consent.focus();
+			frappe.msgprint(__("Tick the consent to sign electronically before you sign."), __("Consent Required"));
+			return false;
+		}
+
 		if (window.saving) return false;
 
 		// TODO: remove this (used for payments app)
@@ -290,6 +298,7 @@ class EsignWebForm extends WebForm {
 				data: this.doc,
 				web_form: this.name,
 				for_payment,
+				esign_consent: consent?.checked ? 1 : 0,
 			},
 			btn: $("btn-primary"),
 			freeze: true,

@@ -21,7 +21,13 @@ from frappe.utils import add_days
 from frappe.utils.pdf import get_pdf
 from PIL import Image, ImageDraw
 
-from esign_webforms.esign.custom.web_form import AuditData, RequestData, record_signature
+from esign_webforms.esign.custom.web_form import (
+	DEFAULT_CONSENT_TEXT,
+	VERIFIED_VIA_LINK,
+	AuditData,
+	RequestData,
+	record_signature,
+)
 
 DOCTYPE = "Service Agreement"
 PRINT_FORMAT = "Service Agreement"
@@ -82,9 +88,9 @@ starting {{ frappe.utils.formatdate(start_date, "MMMM d, yyyy") }}, is ready to 
 <p>Use the button below to read it and sign it on any device.</p>"""
 
 # The signing request and signer the signed agreement's audit record describes: a guest,
-# named by what they typed into the web form's Signer Name and Signer Email fields. The values
-# are the ones the signing page records (_collect_audit_data); 203.0.113.0/24 is a
-# documentation range.
+# named by what they typed into the web form's Signer Name field, with the email the signing
+# link was bound to. The values are the ones the signing page records (_collect_audit_data);
+# 203.0.113.0/24 is a documentation range.
 SIGNER_EMAIL = "dana.whitfield@example.com"
 SIGNER_AGENT = (
 	"Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 "
@@ -420,6 +426,12 @@ def _sign(name: str, today: datetime.date) -> None:
 		"user_agent": SIGNER_AGENT,
 		"signer_email": SIGNER_EMAIL,
 		"signer_name": "Dana Whitfield",
+		# Dana opened the link Send for eSign emailed to her alone, which bound her address.
+		"signer_email_verified": True,
+		"verified_via": VERIFIED_VIA_LINK,
+		"verified_email": SIGNER_EMAIL,
+		"consent_text": DEFAULT_CONSENT_TEXT,
+		"consent_timestamp": f"{today.isoformat()} 10:42:09",
 		"web_form": "Service Agreement",
 		"print_format": PRINT_FORMAT,
 		"signed_fields": ["Signature"],
