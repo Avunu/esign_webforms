@@ -47,7 +47,7 @@
 		"readme": "feature",
 		"width": 2880,
 		"height": 1800,
-		"sha256": "b61d5ba5433a8b3db74386a804ec5cb504a0a99aff61262176e6ac10248f8fdc"
+		"sha256": "603ff331d5a97039835ad75ba8ec0eb0d2159b943cc324bd112d9f098456d615"
 	},
 	{
 		"name": "signer-settings",
@@ -77,6 +77,6 @@
 		"readme": "hero",
 		"width": 2880,
 		"height": 1800,
-		"sha256": "ad20c63355074b96a34a437485334d26c189f222a79f9727968c3f4fe47b6547"
+		"sha256": "ad6b040f312549de8ea5c5684fc65849c887b8c7202825cadb339658f3ddf584"
 	}
 ]
