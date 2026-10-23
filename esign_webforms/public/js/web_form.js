@@ -27,6 +27,30 @@ function update_field_options(frm) {
 }
 
 /**
+ * The field types the "Signer Name Field" and "Signer Email Field" can name (SIGNER_FIELD_TYPES
+ * in esign_webforms/esign/custom/web_form.py).
+ */
+const SIGNER_FIELD_TYPES = ["Data"];
+
+/**
+ * Fill the "Signer Name Field" and "Signer Email Field" selects with the web form's own fields
+ * that they can name: the audit trail records only what the signer typed into the form.
+ * @param {frappe.ui.form.Form<"Web Form">} frm
+ */
+function update_signer_field_options(frm) {
+	/** @type {string[]} */
+	const options = [""];
+	for (const field of frm.doc.web_form_fields ?? []) {
+		if (field.fieldname && field.fieldtype && SIGNER_FIELD_TYPES.includes(field.fieldtype)) {
+			options.push(field.fieldname);
+		}
+	}
+	for (const setting of ["esign_signer_name_field", "esign_signer_email_field"]) {
+		frm.set_df_property(setting, "options", options);
+	}
+}
+
+/**
  * Offer only enabled Custom-event notifications for the web form's doctype.
  * @param {frappe.ui.form.Form<"Web Form">} frm
  */
@@ -49,6 +73,10 @@ const web_form_events = {
 			update_field_options(frm);
 		}
 		set_notification_query(frm);
+		update_signer_field_options(frm);
+	},
+	web_form_fields_remove(frm) {
+		update_signer_field_options(frm);
 	},
 	doc_type(frm) {
 		update_field_options(frm);
@@ -57,3 +85,15 @@ const web_form_events = {
 };
 
 frappe.ui.form.on("Web Form", web_form_events);
+
+/** @type {frappe.ui.form.FormEvents<"Web Form Field">} */
+const web_form_field_events = {
+	fieldname(frm) {
+		update_signer_field_options(frm);
+	},
+	fieldtype(frm) {
+		update_signer_field_options(frm);
+	},
+};
+
+frappe.ui.form.on("Web Form Field", web_form_field_events);

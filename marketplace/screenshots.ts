@@ -8,6 +8,7 @@ import type { ShotSpec } from "./shots.d.ts";
 const SIGNING_PAGE = "/service-agreement/DEMO-AGR-001/edit";
 const UNSIGNED = "/app/service-agreement/DEMO-AGR-001";
 const SIGNED = "/app/service-agreement/DEMO-AGR-002";
+const WEB_FORMS = "/app/web-form";
 
 // The signing page is ready once the agreement's preview is rendered in the shadow root and
 // the web form has built its fields.
@@ -202,7 +203,7 @@ export default {
 		{
 			name: "audit-trail",
 			route: SIGNED,
-			alt: "A signed agreement's timeline: the eSign card with the PDF's SHA-256 hash, the signer's email, IP address, web form, signed fields and browser",
+			alt: "A signed agreement's timeline: the eSign card naming the signer, with the PDF's SHA-256 hash, the signer's email, IP address, web form, signed fields and browser",
 			waitForFn: `${DESK_READY("DEMO-AGR-002")} && !!document.querySelector('.timeline-message-box[data-communication-type="eSign"]')`,
 			actions: [
 				{
@@ -213,6 +214,30 @@ export default {
 			mask: [".frappe-timestamp"],
 			readme: "feature",
 			featured: true,
+		},
+		{
+			name: "signer-settings",
+			// The Web Form form's code editors start ace's syntax-check workers from blob: URLs,
+			// which the network wait never sees finish, so the shot opens the form from the Web
+			// Form list with a stand-in Worker: the editors work without their linting.
+			route: WEB_FORMS,
+			alt: "The eSign web form's settings: Submit on Response, Set Property After Response, and the Signer Name Field and Signer Email Field that name the form fields the audit trail records",
+			waitForFn: "!!(window.cur_list && cur_list.doctype === 'Web Form')",
+			actions: [
+				{
+					eval: "window.Worker = class { postMessage() {} terminate() {} addEventListener() {} removeEventListener() {} }",
+				},
+				{ eval: 'frappe.set_route("Form", "Web Form", "service-agreement")' },
+				{ waitFor: '[data-fieldname="esign_signer_name_field"] select' },
+				{ wait: 800 },
+				// Opens the Settings tab; the highlight it puts on the field is taken off again.
+				{ eval: 'cur_frm.scroll_to_field("esign_submit_on_response", false)' },
+				{ wait: 800 },
+				{ eval: "document.querySelectorAll('.highlight').forEach((el) => el.classList.remove('highlight'))" },
+				{ eval: "document.activeElement && document.activeElement.blur()" },
+			],
+			mask: [".frappe-timestamp"],
+			readme: "feature",
 		},
 	],
 } satisfies ShotSpec;

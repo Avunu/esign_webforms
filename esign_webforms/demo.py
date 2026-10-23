@@ -81,7 +81,8 @@ EMAIL_MESSAGE = """<p>Hello,</p>
 starting {{ frappe.utils.formatdate(start_date, "MMMM d, yyyy") }}, is ready to sign.</p>
 <p>Use the button below to read it and sign it on any device.</p>"""
 
-# The signing request and signer the signed agreement's audit record describes. The values
+# The signing request and signer the signed agreement's audit record describes: a guest,
+# named by what they typed into the web form's Signer Name and Signer Email fields. The values
 # are the ones the signing page records (_collect_audit_data); 203.0.113.0/24 is a
 # documentation range.
 SIGNER_EMAIL = "dana.whitfield@example.com"
@@ -343,6 +344,8 @@ def _ensure_web_form() -> None:
 			"esign_submit_on_response": 1,
 			"esign_update_field": "status",
 			"esign_update_value": "Signed",
+			"esign_signer_name_field": "signer_name",
+			"esign_signer_email_field": "signer_email",
 			"introduction_text": "Read the agreement, then sign it below.",
 			"button_label": "Sign & Submit",
 			"success_title": "Agreement signed",
@@ -416,7 +419,7 @@ def _sign(name: str, today: datetime.date) -> None:
 		"ip_address": "203.0.113.42",
 		"user_agent": SIGNER_AGENT,
 		"signer_email": SIGNER_EMAIL,
-		"signer_name": None,
+		"signer_name": "Dana Whitfield",
 		"web_form": "Service Agreement",
 		"print_format": PRINT_FORMAT,
 		"signed_fields": ["Signature"],
