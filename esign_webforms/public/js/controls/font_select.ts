@@ -353,7 +353,8 @@ export class ControlFontSelect extends ControlData {
 	 */
 	parse_options(): FontOptionInput[] {
 		const raw = (this.df.options as string | RawFontOption[] | undefined) || [];
-		const options: RawFontOption[] = typeof raw === "string" ? raw.split("\n").filter((o) => o.trim()) : raw;
+		const options: RawFontOption[] =
+			typeof raw === "string" ? raw.split("\n").filter((o) => o.trim()) : raw;
 
 		return options.map((opt) => {
 			if (typeof opt === "string") {

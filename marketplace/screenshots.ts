@@ -233,7 +233,9 @@ export default {
 				// Opens the Settings tab; the highlight it puts on the field is taken off again.
 				{ eval: 'cur_frm.scroll_to_field("esign_submit_on_response", false)' },
 				{ wait: 800 },
-				{ eval: "document.querySelectorAll('.highlight').forEach((el) => el.classList.remove('highlight'))" },
+				{
+					eval: "document.querySelectorAll('.highlight').forEach((el) => el.classList.remove('highlight'))",
+				},
 				{ eval: "document.activeElement && document.activeElement.blur()" },
 			],
 			mask: [".frappe-timestamp"],

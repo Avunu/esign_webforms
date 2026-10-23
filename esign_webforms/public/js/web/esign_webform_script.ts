@@ -261,7 +261,10 @@ class EsignWebForm extends WebForm {
 		let is_new = this.is_new;
 		let valid = this.validate && this.validate();
 		if (!valid && valid !== undefined) {
-			frappe.msgprint(__("Couldn't save, please check the data you have entered"), __("Validation Error"));
+			frappe.msgprint(
+				__("Couldn't save, please check the data you have entered"),
+				__("Validation Error"),
+			);
 			return false;
 		}
 
@@ -431,7 +434,9 @@ frappe.ready(function () {
 				// The Attach controls read an object here; frappe's own web form script does the same.
 				const options: unknown = df.options;
 				const attach_options =
-					typeof options === "object" && options !== null ? (options as Record<string, unknown>) : {};
+					typeof options === "object" && options !== null
+						? (options as Record<string, unknown>)
+						: {};
 				attach_options.disable_file_browser = true;
 				Reflect.set(df, "options", attach_options);
 			}
