@@ -3,6 +3,8 @@
 
 """The signing flow: the web form page, its key checks, accept and the signing jobs."""
 
+import hashlib
+import hmac
 import json
 from typing import Any, cast
 from unittest.mock import MagicMock, patch
@@ -15,6 +17,7 @@ from frappe.website.serve import get_response_content
 
 from esign_webforms.esign.custom import web_form as esign_web_form
 from esign_webforms.esign.custom.web_form import (
+	EMAIL_BINDING_PARAM,
 	AuditData,
 	EsignWebForm,
 	RequestData,
@@ -22,9 +25,11 @@ from esign_webforms.esign.custom.web_form import (
 	attach_print_to_document,
 	download_signed_pdf,
 	extract_param_from_referrer,
+	get_bound_email,
 	get_esign_link,
 	get_esign_web_forms,
 	get_print_html,
+	make_email_binding,
 	record_signature,
 	validate_esign_key,
 )
@@ -94,6 +99,7 @@ class EsignTestCase(IntegrationTestCase):
 		frappe.local.request = None
 		frappe.local.form_dict = frappe._dict()
 		frappe.flags.ignore_print_permissions = False
+		frappe.flags.esign_key_write = False
 		frappe.local.message_log = []
 
 	def reload_web_form(self) -> EsignWebForm:
@@ -220,8 +226,22 @@ class TestKeyValidation(EsignTestCase):
 		wf = self.reload_web_form()
 		frappe.set_user("Guest")
 		with signing_request(referrer=f"https://example.com/{WEB_FORM_ROUTE}/x/edit?key={self.key}"):
-			self.assertTrue(wf.has_web_form_permission(TEST_DOCTYPE, self.doc.name, "write"))
+			self.assertTrue(wf.has_web_form_permission(TEST_DOCTYPE, self.doc.name))
 			self.assertEqual(frappe.form_dict.key, self.key)
+
+	def test_share_key_writes_only_through_esign_accept(self):
+		# frappe's own web form accept asks for write permission too; the key must not answer
+		# it there, or a guest could skip the consent and the recipient binding.
+		wf = self.reload_web_form()
+		frappe.set_user("Guest")
+		with signing_request(key=self.key):
+			self.assertTrue(wf.has_web_form_permission(TEST_DOCTYPE, self.doc.name, "read"))
+			self.assertFalse(wf.has_web_form_permission(TEST_DOCTYPE, self.doc.name, "write"))
+			frappe.flags.esign_key_write = True
+			try:
+				self.assertTrue(wf.has_web_form_permission(TEST_DOCTYPE, self.doc.name, "write"))
+			finally:
+				frappe.flags.esign_key_write = False
 
 	def test_has_web_form_permission_falls_back_on_a_bad_key(self):
 		wf = self.reload_web_form()
@@ -346,9 +366,58 @@ class TestEsignLink(EsignTestCase):
 		self.assertIn("&format=Standard", link)
 		self.assertIn("&email=a%2Bb%40example.com", link)
 
+	def test_recipient_email_is_bound_to_the_document(self):
+		from urllib.parse import parse_qs, urlparse
+
+		link = get_esign_link(self.doc, self.web_form_name, "", " a+b@example.com ")
+		params = parse_qs(urlparse(link).query)
+		self.assertEqual(params["email"], ["a+b@example.com"])
+		self.assertEqual(
+			params[EMAIL_BINDING_PARAM],
+			[make_email_binding(TEST_DOCTYPE, str(self.doc.name), "a+b@example.com")],
+		)
+		self.assertEqual(
+			get_bound_email(TEST_DOCTYPE, self.doc.name, params["email"][0], params[EMAIL_BINDING_PARAM][0]),
+			"a+b@example.com",
+		)
+
+	def test_no_binding_without_one_valid_recipient(self):
+		self.assertNotIn(EMAIL_BINDING_PARAM, get_esign_link(self.doc, self.web_form_name))
+		for email in ("not an email", "a@example.com, b@example.com"):
+			with self.subTest(email=email):
+				link = get_esign_link(self.doc, self.web_form_name, "", email)
+				self.assertIn("&email=", link)
+				self.assertNotIn(EMAIL_BINDING_PARAM, link)
+		# send_esign_email asks for no binding when others get the same message.
+		link = esign_web_form.build_esign_link(self.doc, self.web_form_name, "", SIGNER, bind=False)
+		self.assertIn("&email=", link)
+		self.assertNotIn(EMAIL_BINDING_PARAM, link)
+
 	def test_link_from_a_request_payload(self):
 		payload = json.dumps({"doctype": TEST_DOCTYPE, "name": self.doc.name})
 		self.assert_valid_link(get_esign_link(payload, self.web_form_name))
+
+	def test_request_payload_never_gets_a_binding(self):
+		# Over HTTP the caller, not the recipient, holds the link: a binding would let anyone
+		# with email permission sign as any address, verified.
+		for payload in (
+			json.dumps({"doctype": TEST_DOCTYPE, "name": self.doc.name}),
+			{"doctype": TEST_DOCTYPE, "name": self.doc.name},
+		):
+			with self.subTest(payload=type(payload).__name__):
+				link = get_esign_link(payload, self.web_form_name, "", SIGNER)
+				self.assert_valid_link(link)
+				self.assertIn("&email=", link)
+				self.assertNotIn(EMAIL_BINDING_PARAM, link)
+		self.assertIn(EMAIL_BINDING_PARAM, get_esign_link(self.doc, self.web_form_name, "", SIGNER))
+
+	def test_strip_email_binding(self):
+		link = get_esign_link(self.doc, self.web_form_name, "Standard", SIGNER)
+		stripped = esign_web_form.strip_email_binding(link)
+		self.assertNotIn(EMAIL_BINDING_PARAM, stripped)
+		self.assertEqual(stripped, link.split(f"&{EMAIL_BINDING_PARAM}=")[0])
+		unbound = get_esign_link(self.doc, self.web_form_name)
+		self.assertEqual(esign_web_form.strip_email_binding(unbound), unbound)
 
 	def test_request_payload_needs_email_permission(self):
 		frappe.set_user(OUTSIDER)
@@ -558,10 +627,14 @@ def make_notification(**kwargs: Any):
 class TestAccept(EsignTestCase):
 	"""accept: the signature flow and its Guest session switch."""
 
-	def accept(self, data: str, key: str | None = None, **request: Any):
-		referrer = f"https://example.com/{WEB_FORM_ROUTE}/{self.doc.name}/edit?key={key}" if key else None
+	def accept(self, data: str, key: str | None = None, consent: Any = 1, link: str = "", **request: Any):
+		"""Post data to accept from the signing page; link adds the page's other parameters
+		(email, email_sig) to the referrer."""
+		referrer = None
+		if key or link:
+			referrer = f"https://example.com/{WEB_FORM_ROUTE}/{self.doc.name}/edit?key={key or ''}{link}"
 		with signing_request(referrer=referrer, **request), patch("frappe.enqueue") as enqueue:
-			result = accept(self.web_form_name, data)
+			result = accept(self.web_form_name, data, esign_consent=consent)
 		return result, enqueue
 
 	def test_guest_with_key_signs_and_queues_the_signed_pdf(self):
@@ -828,13 +901,13 @@ class TestAccept(EsignTestCase):
 	def test_signer_fields_fall_back_when_empty_or_unset(self):
 		add_signer_fields(self.reload_web_form())
 		wf = self.reload_web_form()
-		# An empty name field falls back to the User the signer's email belongs to.
+		# An empty name field records no name, not the User the signer's email belongs to.
 		self.doc.signer_name = "   "
 		self.doc.signer_email = SIGNER
 		with signing_request():
 			audit = esign_web_form._collect_audit_data(self.doc, wf, "Standard")
 		self.assertEqual(audit["signer_email"], SIGNER)
-		self.assertEqual(audit["signer_name"], "esign-signer")
+		self.assertIsNone(audit["signer_name"])
 
 		# An empty email field falls back to the logged-in user.
 		self.doc.signer_email = None
@@ -876,7 +949,7 @@ class TestAccept(EsignTestCase):
 			signing_request(referrer=f"https://example.com/x?key={self.key}&format=Signed%20Format"),
 			patch("frappe.enqueue") as enqueue,
 		):
-			accept(self.web_form_name, form_data(self.doc, signature=SIGNATURE))
+			accept(self.web_form_name, form_data(self.doc, signature=SIGNATURE), esign_consent=1)
 		self.assertEqual(enqueue.call_args.kwargs["print_format"], "Signed Format")
 		self.assertEqual(enqueue.call_args.kwargs["notification_name"], notification.name)
 
@@ -891,6 +964,11 @@ class TestSigningJobs(EsignTestCase):
 			"user_agent": "<b>TestBrowser</b>",
 			"signer_email": "signer@example.com",
 			"signer_name": "Sam Signer",
+			"signer_email_verified": True,
+			"verified_via": "recipient link",
+			"verified_email": "signer@example.com",
+			"consent_text": "I agree to <sign> electronically.",
+			"consent_timestamp": "2026-10-16 11:59:58",
 			"web_form": "eSign Test Agreement",
 			"print_format": "Standard",
 			"signed_fields": ["Signature"],
@@ -975,6 +1053,10 @@ class TestSigningJobs(EsignTestCase):
 		self.assertIn("&lt;b&gt;TestBrowser&lt;/b&gt;", mail["message"])
 		self.assertNotIn("<b>TestBrowser</b>", mail["message"])
 		self.assertIn("PDF SHA-256", mail["message"])
+		self.assertIn("Email verified via recipient link", mail["message"])
+		self.assertIn("I agree to &lt;sign&gt; electronically.", mail["message"])
+		self.assertIn("Consent Given At", mail["message"])
+		self.assertIn("2026-10-16 11:59:58", mail["message"])
 		self.assertTrue(mail["attachments"][0]["file_url"].startswith("/private/files/"))
 		self.assertTrue(mail["communication"])
 		self.assertEqual(frappe.db.get_value(TEST_DOCTYPE, self.doc.name, "status"), "Notified")
@@ -1069,3 +1151,413 @@ class TestSigningJobs(EsignTestCase):
 		self.assertEqual(appended[0][0], "file_association")
 		self.assertEqual(appended[0][1]["link_doctype"], "Communication")
 		cloud_file.save.assert_called_once()
+
+
+def bound_link(doc: Document, email: str, binding: str | None = None) -> str:
+	"""The email and email_sig parameters of a link bound to email (or carrying binding)."""
+	from urllib.parse import quote
+
+	if binding is None:
+		binding = make_email_binding(doc.doctype, str(doc.name), email)
+	return f"&email={quote(email)}&{EMAIL_BINDING_PARAM}={binding}"
+
+
+class TestEmailBinding(EsignTestCase):
+	"""The HMAC that binds a recipient's email to the document in the signing link."""
+
+	def test_valid_binding_returns_the_email(self):
+		binding = make_email_binding(TEST_DOCTYPE, str(self.doc.name), SIGNER)
+		self.assertEqual(len(binding), 64)
+		self.assertEqual(get_bound_email(TEST_DOCTYPE, self.doc.name, SIGNER, binding), SIGNER)
+
+	def test_binding_is_an_hmac_keyed_with_a_secret_derived_from_the_site_key(self):
+		from frappe.utils.password import get_encryption_key
+
+		key = hmac.new(
+			get_encryption_key().encode(), b"esign_webforms:recipient-email-binding", hashlib.sha256
+		).digest()
+		message = f"{TEST_DOCTYPE}\x00{self.doc.name}\x00{SIGNER}".encode()
+		self.assertEqual(
+			make_email_binding(TEST_DOCTYPE, str(self.doc.name), SIGNER),
+			hmac.new(key, message, hashlib.sha256).hexdigest(),
+		)
+		# Another site (another encryption key) makes another binding.
+		with patch("frappe.utils.password.get_encryption_key", return_value="another-site-key"):
+			other = make_email_binding(TEST_DOCTYPE, str(self.doc.name), SIGNER)
+		self.assertNotEqual(other, make_email_binding(TEST_DOCTYPE, str(self.doc.name), SIGNER))
+
+	def test_email_is_normalized(self):
+		binding = make_email_binding(TEST_DOCTYPE, str(self.doc.name), " Esign-Signer@Example.COM ")
+		self.assertEqual(binding, make_email_binding(TEST_DOCTYPE, str(self.doc.name), SIGNER))
+		self.assertEqual(
+			get_bound_email(TEST_DOCTYPE, self.doc.name, "Esign-Signer@Example.com", binding),
+			"Esign-Signer@Example.com",
+		)
+
+	def test_tampered_binding_is_refused(self):
+		binding = make_email_binding(TEST_DOCTYPE, str(self.doc.name), SIGNER)
+		other_doc = make_agreement()
+		tampered = ("0" if binding[0] != "0" else "1") + binding[1:]
+		cases = {
+			"another email": (self.doc.name, OUTSIDER, binding),
+			"another document": (other_doc.name, SIGNER, binding),
+			"a changed binding": (self.doc.name, SIGNER, tampered),
+			"a shortened binding": (self.doc.name, SIGNER, binding[:32]),
+			"a non-ASCII binding": (self.doc.name, SIGNER, "é" * 64),
+		}
+		for case, (docname, email, sig) in cases.items():
+			with self.subTest(case):
+				self.assertIsNone(get_bound_email(TEST_DOCTYPE, docname, email, sig))
+
+	def test_missing_parts_are_refused(self):
+		binding = make_email_binding(TEST_DOCTYPE, str(self.doc.name), SIGNER)
+		self.assertIsNone(get_bound_email(TEST_DOCTYPE, self.doc.name, SIGNER, None))
+		self.assertIsNone(get_bound_email(TEST_DOCTYPE, self.doc.name, SIGNER, ""))
+		self.assertIsNone(get_bound_email(TEST_DOCTYPE, self.doc.name, "", binding))
+		self.assertIsNone(get_bound_email(TEST_DOCTYPE, None, SIGNER, binding))
+		# Not one valid address: never bound, whatever the binding.
+		for email in ("not an email", f"{SIGNER}, {OUTSIDER}"):
+			sig = make_email_binding(TEST_DOCTYPE, str(self.doc.name), email)
+			self.assertIsNone(get_bound_email(TEST_DOCTYPE, self.doc.name, email, sig))
+
+	def test_comparison_is_constant_time(self):
+		binding = make_email_binding(TEST_DOCTYPE, str(self.doc.name), SIGNER)
+		with patch.object(esign_web_form.hmac, "compare_digest", wraps=hmac.compare_digest) as compare:
+			get_bound_email(TEST_DOCTYPE, self.doc.name, SIGNER, binding)
+		compare.assert_called_once()
+
+
+class TestVerifiedSigningPage(EsignTestCase):
+	"""The signing page with a bound link, and with Require Verified Email."""
+
+	def render_context(self, **form_dict: Any) -> tuple[str, Any]:
+		"""The page's HTML and the context frappe's web form code received."""
+		path = f"{WEB_FORM_ROUTE}/{self.doc.name}/edit"
+		with (
+			signing_request(path=path, method="GET", name=self.doc.name, **form_dict),
+			patch("frappe.utils.get_assets_json", return_value={}),
+			patch("frappe.website.doctype.web_form.web_form.WebForm.add_custom_context_and_script") as custom,
+		):
+			content = get_response_content(path)
+		context = custom.call_args.args[0] if custom.call_args else None
+		return content, context
+
+	def link_params(self, email: str = SIGNER, binding: str | None = None) -> dict[str, str]:
+		if binding is None:
+			binding = make_email_binding(TEST_DOCTYPE, str(self.doc.name), email)
+		return {"email": email, EMAIL_BINDING_PARAM: binding}
+
+	def email_field(self, context: Any) -> dict:
+		return next(
+			field for field in context.web_form_doc["web_form_fields"] if field["fieldname"] == "signer_email"
+		)
+
+	def test_bound_link_prefills_the_email_and_says_it_is_verified(self):
+		frappe.set_user("Guest")
+		content, context = self.render_context(key=self.key, **self.link_params())
+		self.assertIn("esign-layout", content)
+		self.assertIn(f"Signing as {SIGNER}, verified by your email link", content)
+		self.assertEqual(context.reference_doc["signer_email"], SIGNER)
+		# Without Require Verified Email the signer can still change it.
+		self.assertFalse(self.email_field(context).get("read_only"))
+
+	def test_unbound_email_parameter_is_not_called_verified(self):
+		frappe.set_user("Guest")
+		content, context = self.render_context(key=self.key, email=SIGNER)
+		self.assertIn("esign-layout", content)
+		self.assertNotIn("verified by your email link", content)
+		self.assertEqual(context.reference_doc["signer_email"], SIGNER)
+
+	def test_required_verified_email_refuses_a_link_without_a_binding(self):
+		self.web_form.db_set("esign_require_verified_email", 1)
+		frappe.set_user("Guest")
+		for params in ({}, {"email": SIGNER}):
+			with self.subTest(params=params):
+				content, _context = self.render_context(key=self.key, **params)
+				self.assertNotIn("esign-layout", content)
+				self.assertIn("can only be signed through the link emailed to its signer", content)
+
+	def test_required_verified_email_refuses_a_tampered_link(self):
+		self.web_form.db_set("esign_require_verified_email", 1)
+		frappe.set_user("Guest")
+		binding = make_email_binding(TEST_DOCTYPE, str(self.doc.name), SIGNER)
+		for params in (
+			self.link_params(email=OUTSIDER, binding=binding),
+			self.link_params(binding=binding[:-1] + ("0" if binding[-1] != "0" else "1")),
+		):
+			with self.subTest(params=params):
+				content, _context = self.render_context(key=self.key, **params)
+				self.assertNotIn("esign-layout", content)
+				self.assertIn("This signing link has been changed", content)
+
+	def test_required_verified_email_also_needs_the_share_key(self):
+		self.web_form.db_set("esign_require_verified_email", 1)
+		frappe.set_user("Guest")
+		content, _context = self.render_context(**self.link_params())
+		self.assertNotIn("esign-layout", content)
+
+	def test_required_verified_email_locks_the_email_field(self):
+		self.web_form.db_set("esign_require_verified_email", 1)
+		frappe.set_user("Guest")
+		content, context = self.render_context(key=self.key, **self.link_params())
+		self.assertIn("esign-layout", content)
+		self.assertEqual(context.reference_doc["signer_email"], SIGNER)
+		self.assertEqual(self.email_field(context)["read_only"], 1)
+
+	def test_signer_email_field_is_the_one_locked(self):
+		wf = self.reload_web_form()
+		wf.append("web_form_fields", {"fieldname": "title", "fieldtype": "Data", "label": "Your Email"})
+		wf.esign_require_verified_email = 1
+		add_signer_fields(wf, name=None, email="title")
+		frappe.set_user("Guest")
+		_content, context = self.render_context(key=self.key, **self.link_params())
+		fields = {field["fieldname"]: field for field in context.web_form_doc["web_form_fields"]}
+		self.assertEqual(context.reference_doc["title"], SIGNER)
+		self.assertEqual(fields["title"]["read_only"], 1)
+		self.assertFalse(fields["signer_email"].get("read_only"))
+
+	def test_consent_checkbox_with_default_and_custom_text(self):
+		frappe.set_user("Guest")
+		content, _context = self.render_context(key=self.key)
+		self.assertIn('id="esign-consent"', content)
+		self.assertIn("I agree to sign this document electronically.", content)
+
+		frappe.set_user("Administrator")
+		self.web_form.db_set("esign_consent_text", "I agree to <b>e-sign</b> & accept the terms.")
+		frappe.set_user("Guest")
+		content, _context = self.render_context(key=self.key)
+		self.assertIn("I agree to &lt;b&gt;e-sign&lt;/b&gt; &amp; accept the terms.", content)
+		self.assertNotIn("I agree to sign this document electronically.", content)
+
+
+class TestVerifiedAccept(EsignTestCase):
+	"""accept with a bound link, Require Verified Email and the consent to sign electronically."""
+
+	def accept(self, data: str, consent: Any = 1, link: str = "", key: str | None = None):
+		referrer = f"https://example.com/{WEB_FORM_ROUTE}/{self.doc.name}/edit?key={key or self.key}{link}"
+		with signing_request(referrer=referrer), patch("frappe.enqueue") as enqueue:
+			result = accept(self.web_form_name, data, esign_consent=consent)
+		return result, enqueue
+
+	def require_verified_email(self) -> None:
+		self.web_form.db_set("esign_require_verified_email", 1)
+		frappe.clear_document_cache("Web Form", self.web_form_name)
+
+	def test_consent_is_required(self):
+		frappe.set_user("Guest")
+		for consent in (0, "0", "", None):
+			with (
+				self.subTest(consent=consent),
+				self.assertRaisesRegex(frappe.ValidationError, "To sign, tick"),
+			):
+				self.accept(form_data(self.doc, signature=SIGNATURE), consent=consent)
+		self.doc.reload()
+		self.assertFalse(self.doc.signature)
+
+	def test_consent_text_and_time_are_recorded(self):
+		frappe.set_user("Guest")
+		_result, enqueue = self.accept(form_data(self.doc, signature=SIGNATURE), consent="1")
+		audit = enqueue.call_args.kwargs["audit_data"]
+		self.assertEqual(audit["consent_text"], "I agree to sign this document electronically.")
+		self.assertTrue(audit["consent_timestamp"])
+
+		frappe.set_user("Administrator")
+		self.web_form.db_set("esign_consent_text", "  I consent to electronic records and signatures.  ")
+		frappe.set_user("Guest")
+		_result, enqueue = self.accept(form_data(self.doc, signature=SIGNATURE))
+		audit = enqueue.call_args.kwargs["audit_data"]
+		self.assertEqual(audit["consent_text"], "I consent to electronic records and signatures.")
+
+	def test_required_verified_email_refuses_a_missing_binding(self):
+		self.require_verified_email()
+		frappe.set_user("Guest")
+		for link in ("", f"&email={SIGNER}"):
+			with (
+				self.subTest(link=link),
+				self.assertRaisesRegex(frappe.PermissionError, "can only be signed through the link"),
+			):
+				self.accept(form_data(self.doc, signature=SIGNATURE), link=link)
+		self.doc.reload()
+		self.assertFalse(self.doc.signature)
+
+	def test_required_verified_email_refuses_a_tampered_binding(self):
+		self.require_verified_email()
+		frappe.set_user("Guest")
+		binding = make_email_binding(TEST_DOCTYPE, str(self.doc.name), SIGNER)
+		with self.assertRaisesRegex(frappe.PermissionError, "has been changed"):
+			self.accept(
+				form_data(self.doc, signature=SIGNATURE), link=bound_link(self.doc, OUTSIDER, binding)
+			)
+		self.doc.reload()
+		self.assertFalse(self.doc.signature)
+
+	def test_frappes_own_accept_cannot_skip_the_signing_checks(self):
+		# frappe's web form accept is whitelisted for guests as well. With only a share key it
+		# must not save the document: it checks no consent, no binding and no locked email.
+		from frappe.website.doctype.web_form.web_form import accept as frappe_accept
+
+		self.require_verified_email()
+		frappe.set_user("Guest")
+		referrer = f"https://example.com/{WEB_FORM_ROUTE}/{self.doc.name}/edit?key={self.key}"
+		for request in (signing_request(referrer=referrer), signing_request(key=self.key)):
+			with request, self.assertRaises(frappe.PermissionError):
+				frappe_accept(
+					self.web_form_name, form_data(self.doc, signature=SIGNATURE, signer_email=OUTSIDER)
+				)
+		frappe.set_user("Administrator")
+		self.doc.reload()
+		self.assertFalse(self.doc.signature)
+		self.assertNotEqual(self.doc.signer_email, OUTSIDER)
+
+	def test_required_verified_email_refuses_a_new_document(self):
+		self.require_verified_email()
+		frappe.set_user("Guest")
+		data = json.dumps({"doctype": TEST_DOCTYPE, "signature": SIGNATURE})
+		with self.assertRaises(frappe.PermissionError):
+			self.accept(data, link=bound_link(self.doc, SIGNER))
+
+	def test_required_verified_email_ignores_a_changed_email(self):
+		self.require_verified_email()
+		frappe.set_user("Guest")
+		_result, enqueue = self.accept(
+			form_data(self.doc, signature=SIGNATURE, signer_email="someone.else@example.com"),
+			link=bound_link(self.doc, SIGNER),
+		)
+		self.doc.reload()
+		self.assertEqual(self.doc.signer_email, SIGNER)
+		audit = enqueue.call_args.kwargs["audit_data"]
+		self.assertEqual(audit["signer_email"], SIGNER)
+		self.assertTrue(audit["signer_email_verified"])
+		self.assertEqual(audit["verified_via"], "recipient link")
+		self.assertEqual(audit["verified_email"], SIGNER)
+
+	def test_required_verified_email_ignores_a_changed_signer_email_field(self):
+		wf = self.reload_web_form()
+		wf.esign_require_verified_email = 1
+		add_signer_fields(wf)
+		frappe.set_user("Guest")
+		_result, enqueue = self.accept(
+			form_data(self.doc, signature=SIGNATURE, signer_name="Sam Signer", signer_email=OUTSIDER),
+			link=bound_link(self.doc, SIGNER),
+		)
+		self.doc.reload()
+		self.assertEqual(self.doc.signer_email, SIGNER)
+		audit = enqueue.call_args.kwargs["audit_data"]
+		self.assertEqual(audit["signer_email"], SIGNER)
+		self.assertEqual(audit["signer_name"], "Sam Signer")
+		self.assertTrue(audit["signer_email_verified"])
+
+	def test_bound_email_is_recorded_as_verified_without_the_setting(self):
+		frappe.set_user("Guest")
+		_result, enqueue = self.accept(
+			form_data(self.doc, signature=SIGNATURE), link=bound_link(self.doc, SIGNER)
+		)
+		audit = enqueue.call_args.kwargs["audit_data"]
+		self.assertEqual(audit["signer_email"], SIGNER)
+		self.assertTrue(audit["signer_email_verified"])
+		self.assertEqual(audit["verified_via"], "recipient link")
+
+	def test_without_the_setting_a_changed_email_is_recorded_unverified(self):
+		add_signer_fields(self.reload_web_form())
+		frappe.set_user("Guest")
+		_result, enqueue = self.accept(
+			form_data(self.doc, signature=SIGNATURE, signer_email="typed@example.com"),
+			link=bound_link(self.doc, SIGNER),
+		)
+		self.doc.reload()
+		self.assertEqual(self.doc.signer_email, "typed@example.com")
+		audit = enqueue.call_args.kwargs["audit_data"]
+		self.assertEqual(audit["signer_email"], "typed@example.com")
+		self.assertFalse(audit["signer_email_verified"])
+		self.assertIsNone(audit["verified_via"])
+		self.assertEqual(audit["verified_email"], SIGNER)
+
+	def test_unbound_or_tampered_email_parameter_is_not_verified(self):
+		frappe.set_user("Guest")
+		binding = make_email_binding(TEST_DOCTYPE, str(self.doc.name), SIGNER)
+		for link in (f"&email={SIGNER}", bound_link(self.doc, OUTSIDER, binding)):
+			with self.subTest(link=link):
+				_result, enqueue = self.accept(form_data(self.doc, signature=SIGNATURE), link=link)
+				audit = enqueue.call_args.kwargs["audit_data"]
+				self.assertFalse(audit["signer_email_verified"])
+				self.assertIsNone(audit["verified_via"])
+				self.assertIsNone(audit["verified_email"])
+
+
+class TestSignerName(EsignTestCase):
+	"""Only the name the signer typed is recorded, never a User's looked up by email."""
+
+	def collect(self, wf: EsignWebForm) -> AuditData:
+		with signing_request():
+			return esign_web_form._collect_audit_data(self.doc, wf, "Standard")
+
+	def test_guest_typing_a_users_email_is_not_named_after_that_user(self):
+		frappe.set_user("Guest")
+		# Without a Signer Name Field (the email comes from the form's Email field)...
+		self.doc.signer_email = SIGNER
+		audit = self.collect(self.reload_web_form())
+		self.assertEqual(audit["signer_email"], SIGNER)
+		self.assertIsNone(audit["signer_name"])
+
+		# ...and with one left empty.
+		add_signer_fields(self.reload_web_form())
+		self.doc.signer_name = ""
+		audit = self.collect(self.reload_web_form())
+		self.assertEqual(audit["signer_email"], SIGNER)
+		self.assertIsNone(audit["signer_name"])
+
+	def test_bound_link_to_a_users_email_does_not_name_the_user(self):
+		frappe.set_user("Guest")
+		self.doc.signer_email = None
+		with signing_request():
+			audit = esign_web_form._collect_audit_data(
+				self.doc, self.reload_web_form(), "Standard", bound_email=SIGNER
+			)
+		self.assertTrue(audit["signer_email_verified"])
+		self.assertIsNone(audit["signer_name"])
+
+	def test_logged_in_user_signing_as_themselves_without_a_name_field(self):
+		frappe.set_user(SIGNER)
+		self.doc.signer_email = None
+		audit = self.collect(self.reload_web_form())
+		self.assertEqual(audit["signer_email"], SIGNER)
+		self.assertEqual(audit["signer_name"], "esign-signer")
+
+		# Signing for another address is not signing as themselves.
+		self.doc.signer_email = OUTSIDER
+		audit = self.collect(self.reload_web_form())
+		self.assertEqual(audit["signer_email"], OUTSIDER)
+		self.assertIsNone(audit["signer_name"])
+
+	def test_logged_in_user_with_an_empty_name_field_is_not_named(self):
+		add_signer_fields(self.reload_web_form())
+		frappe.set_user(SIGNER)
+		self.doc.signer_name = None
+		self.doc.signer_email = SIGNER
+		audit = self.collect(self.reload_web_form())
+		self.assertEqual(audit["signer_email"], SIGNER)
+		self.assertIsNone(audit["signer_name"])
+
+	def test_typed_name_is_recorded(self):
+		add_signer_fields(self.reload_web_form())
+		frappe.set_user(SIGNER)
+		self.doc.signer_name = "Sam  Signer"
+		self.doc.signer_email = SIGNER
+		self.assertEqual(self.collect(self.reload_web_form())["signer_name"], "Sam Signer")
+
+
+class TestVerificationRows(IntegrationTestCase):
+	def test_rows_for_each_verification_state(self):
+		self.assertEqual(
+			esign_web_form.verification_rows(
+				{"signer_email_verified": True, "verified_via": "recipient link"}
+			),
+			[("Verification", "Email verified via recipient link")],
+		)
+		self.assertEqual(
+			esign_web_form.verification_rows(
+				{"signer_email_verified": False, "verified_email": "a@example.com"}
+			),
+			[("Link Sent To", "a@example.com, verified via recipient link")],
+		)
+		self.assertEqual(esign_web_form.verification_rows({"signer_email": "a@example.com"}), [])

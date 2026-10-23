@@ -172,6 +172,12 @@
 			<div id="esign-form" class="esign-form-card {{ 'd-lg-none' if force_mobile else '' }}">
 				<div class="esign-form-header">
 					<h3>{{ _("Fill and Sign") }}</h3>
+					{% if esign_verified_email %}
+					<p class="esign-verified-email">
+						<svg class="icon icon-sm"><use href="#icon-solid-success"></use></svg>
+						{{ _("Signing as {0}, verified by your email link").format(esign_verified_email | e) }}
+					</p>
+					{% endif %}
 				</div>
 
 				<form role="form" class="web-form esign-form">
@@ -182,6 +188,10 @@
 					</div>
 
 					<div class="esign-form-footer">
+						<label class="esign-consent">
+							<input type="checkbox" id="esign-consent" name="esign_consent" required>
+							<span>{{ esign_consent_text | e }}</span>
+						</label>
 						<button type="submit" class="btn btn-primary btn-lg btn-block esign-submit-btn">
 							{{ _(button_label, context="Button in web form") or _("Sign & Submit", context="Button in web form") }}
 						</button>

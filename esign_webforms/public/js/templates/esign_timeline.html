@@ -38,6 +38,11 @@
 					{% if (signer_email) { %}
 					<li>{{ __("Email") }}: {{ signer_email }}</li>
 					{% } %}
+					{% if (email_verified) { %}
+					<li class="esign-email-verified">✓ {{ __("Email verified via recipient link") }}</li>
+					{% } else if (verified_email) { %}
+					<li>{{ __("Link sent to {0}, verified via recipient link", [verified_email]) }}</li>
+					{% } %}
 					{% if (ip_address) { %}
 					<li>{{ __("IP") }}: {{ ip_address }}</li>
 					{% } %}
@@ -57,6 +62,14 @@
 				{% } %}
 			</div>
 		</div>
+		{% if (consent_text) { %}
+		<div class="mt-2">
+			<strong>{{ __("Consent") }}</strong>
+			<div class="text-muted">
+				{{ consent_text }}{% if (consent_timestamp) { %} · {{ __("agreed on {0}", [frappe.datetime.str_to_user(consent_timestamp)]) }}{% } %}
+			</div>
+		</div>
+		{% } %}
 		{% if (user_agent) { %}
 		<div class="text-muted mt-2" style="font-size: var(--text-tiny); word-break: break-all;">
 			{{ __("User Agent") }}: {{ user_agent }}

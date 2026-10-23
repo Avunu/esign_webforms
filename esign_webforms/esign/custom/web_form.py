@@ -2,7 +2,9 @@
 # For license information, please see license.txt
 
 import hashlib
+import hmac
 import json
+import re
 import uuid
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -13,7 +15,6 @@ import frappe
 from frappe import _
 from frappe.core.doctype.file.file import File
 from frappe.core.doctype.file.utils import get_content_hash, remove_file_by_url
-from frappe.core.doctype.user.user import User
 from frappe.email.doctype.notification.notification import Notification
 from frappe.model import numeric_fieldtypes
 from frappe.model.docstatus import DocStatus
@@ -36,6 +37,16 @@ SIGNER_FIELD_TYPES = ("Data",)
 # The longest signer name recorded, as frappe's User full_name and Communication
 # sender_full_name hold it.
 SIGNER_NAME_LENGTH = 140
+
+# The signing link's parameter that binds its `email` parameter to the document: an HMAC of
+# the document and the address, keyed with a secret derived from the site's encryption key.
+EMAIL_BINDING_PARAM = "email_sig"
+
+# How a recorded signer email was verified (AuditData.verified_via).
+VERIFIED_VIA_LINK = "recipient link"
+
+# The consent checkbox's text when the web form sets none (esign_consent_text).
+DEFAULT_CONSENT_TEXT = "I agree to sign this document electronically."
 
 
 class PrintHtmlResponse(TypedDict):
@@ -85,13 +96,25 @@ class RequestData(TypedDict):
 
 
 class AuditData(TypedDict):
-	"""Audit trail data captured at signing time."""
+	"""Audit trail data captured at signing time.
+
+	signer_email_verified is true when signer_email is the address the signing link was bound
+	to (verified_via says how); verified_email is that address, recorded whenever the link
+	carried a valid binding, even if the signer entered another address. consent_text is the
+	electronic-signature consent the signer agreed to, and consent_timestamp when the server
+	received it.
+	"""
 
 	timestamp: str
 	ip_address: str | None
 	user_agent: str | None
 	signer_email: str | None
 	signer_name: str | None
+	signer_email_verified: bool
+	verified_via: str | None
+	verified_email: str | None
+	consent_text: str | None
+	consent_timestamp: str | None
 	web_form: str
 	print_format: str
 	signed_fields: list[str]
@@ -158,6 +181,107 @@ def _signer_fieldname(wf: EsignWebForm, setting: str) -> str | None:
 	return None
 
 
+def _normalize_email(email: str | None) -> str:
+	"""An address as the email binding and its comparisons read it: trimmed, in lower case."""
+	return (email or "").strip().lower()
+
+
+def _binding_key() -> bytes:
+	"""The key email bindings are signed with.
+
+	Derived from the site's encryption key (frappe creates one on first use), so it is secret,
+	differs per site and is not the encryption key itself. Rotating the encryption key
+	invalidates every bound link sent before.
+	"""
+	from frappe.utils.password import get_encryption_key
+
+	return hmac.new(
+		get_encryption_key().encode(), b"esign_webforms:recipient-email-binding", hashlib.sha256
+	).digest()
+
+
+def make_email_binding(doctype: str, docname: str, email: str) -> str:
+	"""The HMAC-SHA256 that binds email to one document, as the link's `email_sig` parameter.
+
+	It covers the doctype, the document name and the address (normalized), so it cannot be
+	moved to another document or another address. It does not replace the share key, which
+	still decides whether the link opens the document at all and when it expires.
+	"""
+	message = "\x00".join((doctype, str(docname), _normalize_email(email))).encode()
+	return hmac.new(_binding_key(), message, hashlib.sha256).hexdigest()
+
+
+def strip_email_binding(link: str) -> str:
+	"""link without its `email_sig` binding, for every copy of it that is not the email to its
+	recipient: the sender's API response and the Communication any reader of the document sees.
+	Whoever holds the binding signs as the recipient, verified."""
+	return re.sub(rf"[?&]{EMAIL_BINDING_PARAM}=[0-9A-Fa-f]*", "", link)
+
+
+def _is_single_email(value: str | None) -> bool:
+	"""Whether value is one valid email address. validate_email_address accepts a list of
+	them, separated by commas, and returns the valid ones joined the same way."""
+	if not value or "," in value:
+		return False
+	return validate_email_address(value) == value
+
+
+def get_bound_email(doctype: str, docname: str | None, email: str | None, binding: str | None) -> str | None:
+	"""The link's email when binding is its valid HMAC for this document, otherwise None.
+
+	The comparison is constant time, so the response time does not reveal how much of a
+	guessed binding was right.
+	"""
+	email = (email or "").strip()
+	if not binding or not docname or not _is_single_email(email):
+		return None
+	expected = make_email_binding(doctype, docname, email)
+	if hmac.compare_digest(expected.encode(), binding.strip().encode()):
+		return email
+	return None
+
+
+def _require_bound_email(
+	wf: EsignWebForm, doctype: str, docname: str | None, email: str | None, binding: str | None
+) -> str | None:
+	"""The link's bound email, or None when it has no valid binding.
+
+	With the web form's Require Verified Email on, a missing or invalid binding is refused
+	instead, with a message the signer can act on.
+	"""
+	bound = get_bound_email(doctype, docname, email, binding)
+	if bound or not wf.get("esign_require_verified_email"):
+		return bound
+	if binding:
+		frappe.throw(
+			_(
+				"This signing link has been changed, or it was not sent for this document. Open the "
+				"link from your email exactly as it is, or ask the sender for a new one."
+			),
+			frappe.PermissionError,
+			title=_("Invalid Signing Link"),
+		)
+	frappe.throw(
+		_(
+			"This document can only be signed through the link emailed to its signer. Open the link "
+			"from your email, or ask the sender to send it again."
+		),
+		frappe.PermissionError,
+		title=_("Signing Link Required"),
+	)
+
+
+def _email_fieldname(wf: EsignWebForm) -> str | None:
+	"""The form field that holds the signer's email: the Signer Email Field, or else a Data
+	field whose options are Email."""
+	return _signer_fieldname(wf, "esign_signer_email_field") or _find_email_fieldname(wf)
+
+
+def get_consent_text(wf: EsignWebForm) -> str:
+	"""The consent checkbox's text: the web form's own, or the default in the signer's language."""
+	return (wf.get("esign_consent_text") or "").strip() or _(DEFAULT_CONSENT_TEXT)
+
+
 class EsignWebForm(BaseWebForm):
 	"""eSign behaviour for Web Form, registered through `extend_doctype_class`.
 
@@ -176,6 +300,8 @@ class EsignWebForm(BaseWebForm):
 	# Selects whose options are the web form's own Data fields, set at runtime (web_form.js).
 	esign_signer_name_field: DF.Data | None
 	esign_signer_email_field: DF.Data | None
+	esign_require_verified_email: DF.Check | None
+	esign_consent_text: DF.SmallText | None
 	esign_submit_on_response: DF.Check | None
 	esign_send_notification: DF.Check | None
 	esign_notification: DF.Link | None
@@ -269,6 +395,15 @@ class EsignWebForm(BaseWebForm):
 		validate_esign_access(key, doc, self)
 		doc.flags.ignore_permissions = True
 
+		# The recipient's email, when the link binds it to this document. With Require
+		# Verified Email, a link without a valid binding is refused here.
+		email_param = frappe.form_dict.get("email", "")
+		bound_email = _require_bound_email(
+			self, self.doc_type, cur_doc_name, email_param, frappe.form_dict.get(EMAIL_BINDING_PARAM)
+		)
+		lock_email = bool(bound_email and self.esign_require_verified_email)
+		email_fieldname = _email_fieldname(self)
+
 		# Allow public access to the web form if validation passes
 		print_format = frappe.form_dict.get("format", self.print_format) or "standard"
 
@@ -282,6 +417,12 @@ class EsignWebForm(BaseWebForm):
 				"in_edit_mode": True,
 			}
 		)
+		if lock_email and email_fieldname:
+			# The signer cannot change the address the link was sent to; accept ignores a
+			# changed one too, so this is only for the signer's benefit.
+			for field in web_form_doc.get("web_form_fields") or []:
+				if field.get("fieldname") == email_fieldname:
+					field["read_only"] = 1
 		context.web_form_doc = web_form_doc
 		super().load_form_data(context)
 		super().load_translations(context)
@@ -296,15 +437,14 @@ class EsignWebForm(BaseWebForm):
 		form_fields.add("doctype")
 		context.reference_doc = {k: v for k, v in doc.as_dict().items() if k in form_fields}
 
-		# Pre-fill email field from URL param (e.g. when link was sent via email). This only
-		# fills the form: the signer can change it, and what is saved is what they submit.
-		email_param = frappe.form_dict.get("email", "")
-		if email_param:
-			email_fieldname = _signer_fieldname(self, "esign_signer_email_field") or _find_email_fieldname(
-				self
-			)
-			if email_fieldname and email_fieldname in form_fields:
-				context.reference_doc[email_fieldname] = email_param
+		# Pre-fill email field from URL param (e.g. when link was sent via email). Unless the
+		# web form requires a verified email, this only fills the form: the signer can change
+		# it, and what is saved is what they submit.
+		prefill = bound_email or email_param
+		if prefill and email_fieldname and email_fieldname in form_fields:
+			context.reference_doc[email_fieldname] = prefill
+		context.esign_verified_email = bound_email or ""
+		context.esign_consent_text = get_consent_text(self)
 
 		super().add_custom_context_and_script(context)
 
@@ -414,8 +554,11 @@ class EsignWebForm(BaseWebForm):
 
 	def has_web_form_permission(self, doctype, name, ptype="read"):
 		"""Override to allow eSign access for Guest users with valid keys"""
-		# For eSign forms, check key-based access first
-		if self.esign_enabled and name:
+		# For eSign forms, check key-based access first. The share key lets a signer read the
+		# document anywhere, but write it only through this app's accept, which also checks
+		# the consent and the recipient binding: frappe's own web form accept (whitelisted for
+		# guests too) asks this same question before saving, and would skip both.
+		if self.esign_enabled and name and (ptype == "read" or frappe.flags.esign_key_write):
 			# Try to get the key from form_dict or extract from referrer
 			if not frappe.form_dict.get("key"):
 				frappe.form_dict.key = extract_param_from_referrer("key")
@@ -480,6 +623,18 @@ def validate_esign_access(
 		if wf and BaseWebForm.has_web_form_permission(wf, doc.doctype, str(doc.name), "read"):
 			return True
 	return validate_esign_key(key, doc, require_key=require_key)
+
+
+def verification_rows(audit_data: AuditData | dict) -> list[tuple[str, str]]:
+	"""How the signer's email was verified, as label and text rows for the notification email
+	(the timeline card shows the same in esign_timeline.html)."""
+	if audit_data.get("signer_email_verified"):
+		# The only way an email is verified (verified_via is VERIFIED_VIA_LINK).
+		return [(_("Verification"), _("Email verified via recipient link"))]
+	if verified_email := audit_data.get("verified_email"):
+		# The link was bound to one address, and the signer entered another.
+		return [(_("Link Sent To"), _("{0}, verified via recipient link").format(verified_email))]
+	return []
 
 
 _UNSET = object()
@@ -563,6 +718,11 @@ def _send_esign_notification(
 				audit_rows.append((_("Signer"), audit_data["signer_name"]))
 			if audit_data.get("signer_email"):
 				audit_rows.append((_("Email"), audit_data["signer_email"]))
+			audit_rows.extend(verification_rows(audit_data))
+			if audit_data.get("consent_text"):
+				audit_rows.append((_("Consent"), audit_data["consent_text"]))
+			if audit_data.get("consent_timestamp"):
+				audit_rows.append((_("Consent Given At"), audit_data["consent_timestamp"]))
 			if audit_data.get("timestamp"):
 				audit_rows.append((_("Signed At"), audit_data["timestamp"]))
 			if audit_data.get("ip_address"):
@@ -873,6 +1033,54 @@ def attach_print_to_document(
 	)
 
 
+def build_esign_link(
+	doc: Document,
+	web_form_name: str,
+	print_format_name: str = "",
+	recipient_email: str = "",
+	bind: bool = True,
+) -> str:
+	"""The signing link for doc through the eSign web form, or "" when the form does not fit.
+
+	With recipient_email, the link carries it as its `email` parameter and, when bind is true
+	and it is one valid address, the `email_sig` binding that lets the signing page treat it
+	as verified (see make_email_binding). send_esign_email passes bind=False when the same
+	message also goes to other people, since anyone holding the link could then sign as the
+	recipient.
+	"""
+	try:
+		web_form = EsignWebForm("Web Form", web_form_name)
+		if not web_form.esign_enabled or web_form.doc_type != doc.doctype:
+			return ""
+
+		# Generate the URL
+		from urllib.parse import quote
+
+		from frappe.utils import get_url
+
+		base_url = get_url().rstrip("/")
+		share_key = doc.get_document_share_key()
+		web_form_path = f"/{(web_form.route or '').lstrip('/')}/{doc.name}/edit"
+		query_string = f"?key={share_key}"
+		if print_format_name:
+			query_string += f"&format={print_format_name}"
+		recipient_email = (recipient_email or "").strip()
+		if recipient_email:
+			query_string += f"&email={quote(recipient_email)}"
+			if bind and _is_single_email(recipient_email):
+				binding = make_email_binding(doc.doctype, str(doc.name), recipient_email)
+				query_string += f"&{EMAIL_BINDING_PARAM}={binding}"
+
+		return f"{base_url}{web_form_path}{query_string}"
+
+	except Exception as e:
+		frappe.log_error(
+			title=f"eSign: Failed to generate link for {doc.doctype} {doc.name} and Web Form {web_form_name}",
+			message=e,
+		)
+		return ""
+
+
 @frappe.whitelist()
 def get_esign_link(
 	doc: Document | str | dict, web_form_name: str, print_format_name: str = "", recipient_email: str = ""
@@ -883,10 +1091,15 @@ def get_esign_link(
 		doc: The document (or JSON/dict) to generate the link for
 		web_form_name: Name of the eSign-enabled Web Form
 		print_format_name: Optional print format override
-		recipient_email: Optional email of the intended signer; appended as
-			``&email=`` so the web form can pre-fill a Data(Email) field and
-			record the signer in the audit trail.
+		recipient_email: Optional email of the intended signer. The link carries it as
+			``&email=``, so the signing page pre-fills the form's email field with it. From
+			Jinja or Python (doc is a Document) it also carries an ``&email_sig=`` binding,
+			and the audit trail records the address as verified by the recipient link: send
+			such a link to that recipient only. A request (doc is JSON or a dict) never gets
+			the binding, since the caller, not the recipient, would hold it and could sign
+			as them; send_esign_email emails a bound link instead.
 	"""
+	from_request = not isinstance(doc, Document)
 	if isinstance(doc, str):
 		try:
 			doc = json.loads(doc)
@@ -899,37 +1112,12 @@ def get_esign_link(
 		except Exception as e:
 			return str(e)
 		# A reference from a request: the link carries a share key that opens the document to
-		# whoever holds it, so the caller must be allowed to email the document (as for
-		# send_esign_email). Server-side callers (Jinja, Python) pass the Document itself.
+		# whoever holds it, and with recipient_email a binding that vouches for the address, so
+		# the caller must be allowed to email the document (as for send_esign_email).
+		# Server-side callers (Jinja, Python) pass the Document itself.
 		frappe.has_permission(doc.doctype, ptype="email", doc=doc, throw=True)
 
-	try:
-		web_form = EsignWebForm("Web Form", web_form_name)
-		if not web_form.esign_enabled or web_form.doc_type != doc.doctype:
-			return ""
-
-		# Generate the URL
-		from frappe.utils import get_url
-
-		base_url = get_url().rstrip("/")
-		share_key = doc.get_document_share_key()
-		web_form_path = f"/{(web_form.route or '').lstrip('/')}/{doc.name}/edit"
-		query_string = f"?key={share_key}"
-		if print_format_name:
-			query_string += f"&format={print_format_name}"
-		if recipient_email:
-			from urllib.parse import quote
-
-			query_string += f"&email={quote(recipient_email)}"
-
-		return f"{base_url}{web_form_path}{query_string}"
-
-	except Exception as e:
-		frappe.log_error(
-			title=f"eSign: Failed to generate link for {doc.doctype} {doc.name} and Web Form {web_form_name}",
-			message=e,
-		)
-		return ""
+	return build_esign_link(doc, web_form_name, print_format_name, recipient_email, bind=not from_request)
 
 
 # Reviewed guest endpoint: validate_esign_access needs the share key, or the web form's or print permission.
@@ -1132,7 +1320,7 @@ def get_esign_web_forms(doctype: str):
 	return frappe.get_all(
 		"Web Form",
 		filters={"doc_type": doctype, "esign_enabled": 1, "published": 1},
-		fields=["name", "title", "route", "print_format"],
+		fields=["name", "title", "route", "print_format", "esign_require_verified_email"],
 	)
 
 
@@ -1162,27 +1350,36 @@ def _get_client_ip() -> str | None:
 	return getattr(frappe.request, "remote_addr", None)
 
 
-def _is_single_email(value: str | None) -> bool:
-	"""Whether value is one valid email address. validate_email_address accepts a list of
-	them, separated by commas, and returns the valid ones joined the same way."""
-	if not value or "," in value:
-		return False
-	return validate_email_address(value) == value
-
-
-def _collect_audit_data(doc: Document, wf: EsignWebForm, print_format: str) -> AuditData:
+def _collect_audit_data(
+	doc: Document,
+	wf: EsignWebForm,
+	print_format: str,
+	bound_email: str | None = None,
+	consent_text: str | None = None,
+	consent_timestamp: str | None = None,
+) -> AuditData:
 	"""Collect audit trail data at the moment of signing.
 
+	bound_email is the address the signing link was bound to (see get_bound_email), if it
+	carried a valid binding; consent_text and consent_timestamp record the signer's consent
+	to sign electronically, as accept received it.
+
 	Signer email resolution order:
+		0. With Require Verified Email on the web form, the bound email, and nothing else
 		1. With a Signer Email Field set on the web form, the valid address the signer
 		submitted in it; the link's ``email`` parameter is then not used
-		2. Without one, the ``email`` URL search param (set when the eSign link was emailed)
+		2. Without one, the bound email, or else the ``email`` URL search param (set when the
+		eSign link was emailed)
 		3. Without one, a Data field with Options="Email" on the web form (filled by the signer)
 		4. The logged-in Frappe user (if not Guest)
 
-	Signer name resolution order:
-		1. The web form's Signer Name Field (what the signer typed)
-		2. The full name of the User with the signer's email
+	The email is recorded as verified (verified_via "recipient link") when it is the bound
+	email.
+
+	Signer name: only what the signer typed into the web form's Signer Name Field. A User's
+	name is never looked up from an address, which the signer may have typed. Only on a web
+	form without a Signer Name Field, a logged-in user signing as themselves (the signer
+	email is their own login) is named after their own User.
 	"""
 	# Get IP address from various possible headers (proxy-aware)
 	ip_address = _get_client_ip()
@@ -1195,16 +1392,20 @@ def _collect_audit_data(doc: Document, wf: EsignWebForm, print_format: str) -> A
 	# --- Resolve signer email ---
 	signer_email = None
 
-	if _signer_fieldname(wf, "esign_signer_email_field"):
+	if bound_email and wf.esign_require_verified_email:
+		# 0. The web form only accepts the address the link was sent to.
+		signer_email = bound_email
+	elif _signer_fieldname(wf, "esign_signer_email_field"):
 		# 1. The web form names the field the signer's email is in: record only what the
 		# signer submitted there. It is their own input, so only a valid address is recorded.
 		field_email = _signer_field_value(doc, wf, "esign_signer_email_field")
 		if _is_single_email(field_email):
 			signer_email = field_email
 	else:
-		# 2. From the email URL search param (link was sent via email)
-		# The parameter is the signer's own input, so only a valid address is recorded.
-		email_param = extract_param_from_referrer("email")
+		# 2. From the email URL search param (link was sent via email): the bound one, or
+		# else the parameter, which is the signer's own input, so only a valid address is
+		# recorded.
+		email_param = bound_email or extract_param_from_referrer("email")
 		if _is_single_email(email_param):
 			signer_email = email_param
 
@@ -1219,18 +1420,21 @@ def _collect_audit_data(doc: Document, wf: EsignWebForm, print_format: str) -> A
 	if not signer_email and frappe.session.user and frappe.session.user != "Guest":
 		signer_email = frappe.session.user
 
+	verified = bool(bound_email and _normalize_email(signer_email) == _normalize_email(bound_email))
+
 	# The name the signer typed into the web form's Signer Name Field
 	signer_name = _signer_field_value(doc, wf, "esign_signer_name_field")
 	if signer_name:
 		signer_name = signer_name[:SIGNER_NAME_LENGTH]
-
-	# Otherwise the full name of the User the signer's email belongs to
-	if not signer_name and signer_email:
-		try:
-			user_doc = cast(User, frappe.get_cached_doc("User", signer_email))
-			signer_name = user_doc.full_name if user_doc else None
-		except frappe.DoesNotExistError:
-			pass
+	elif (
+		not _signer_fieldname(wf, "esign_signer_name_field")
+		and frappe.session.user != "Guest"
+		and _normalize_email(signer_email) == _normalize_email(frappe.session.user)
+	):
+		# No name field to type into: a logged-in user signing as themselves is named after
+		# their own User record, never after one an address points to.
+		full_name = frappe.db.get_value("User", frappe.session.user, "full_name")
+		signer_name = str(full_name)[:SIGNER_NAME_LENGTH] if full_name else None
 
 	# Identify which signature fields were filled
 	signed_fields = []
@@ -1247,13 +1451,24 @@ def _collect_audit_data(doc: Document, wf: EsignWebForm, print_format: str) -> A
 		user_agent=user_agent,
 		signer_email=signer_email,
 		signer_name=signer_name,
+		signer_email_verified=verified,
+		verified_via=VERIFIED_VIA_LINK if verified else None,
+		verified_email=bound_email or None,
+		consent_text=consent_text,
+		consent_timestamp=consent_timestamp,
 		web_form=str(wf.title or wf.name),
 		print_format=print_format,
 		signed_fields=signed_fields,
 	)
 
 
-def _enqueue_print_attachment(doc: Document, wf: EsignWebForm):
+def _enqueue_print_attachment(
+	doc: Document,
+	wf: EsignWebForm,
+	bound_email: str | None = None,
+	consent_text: str | None = None,
+	consent_timestamp: str | None = None,
+):
 	"""Enqueue background job to attach signed PDF to the document."""
 	# Determine the print format to use
 	print_format = extract_param_from_referrer("format")
@@ -1272,7 +1487,7 @@ def _enqueue_print_attachment(doc: Document, wf: EsignWebForm):
 	}
 
 	# Collect audit data
-	audit_data = _collect_audit_data(doc, wf, print_format)
+	audit_data = _collect_audit_data(doc, wf, print_format, bound_email, consent_text, consent_timestamp)
 
 	# Get notification name if configured
 	notification_name = None
@@ -1298,12 +1513,18 @@ def _enqueue_print_attachment(doc: Document, wf: EsignWebForm):
 # a write permission, and a new document only what the web form allows.
 @frappe.whitelist(allow_guest=True)  # nosemgrep: guest-whitelisted-method
 @rate_limit(key="web_form", limit=10, seconds=60)
-def accept(web_form: str, data: str):
+def accept(web_form: str, data: str, esign_consent: str | int | None = None):
 	"""Custom accept function for eSign web forms that properly handles Guest permissions.
 
 	This overrides the default web form accept to ensure that eSign forms with valid
 	document share keys can be submitted by Guest users without permission errors.
 	Also handles field updates, document submission, and PDF attachment in a single flow.
+
+	Args:
+		web_form: The web form's name
+		data: The form's values, as JSON
+		esign_consent: Truthy when the signer ticked the consent to sign electronically;
+			an eSign web form refuses to sign without it
 	"""
 	from frappe.website.doctype.web_form.web_form import accept as base_accept
 
@@ -1337,12 +1558,36 @@ def accept(web_form: str, data: str):
 	# permission: the three ways frappe's own accept lets an update through (the last one by
 	# saving with permission checks on). Otherwise anyone who knows a document name could
 	# overwrite its form fields.
-	if (
-		form.name
-		and not wf.has_web_form_permission(doctype, form.name, "write")
-		and not frappe.has_permission(doctype, "write", form.name)
-	):
-		frappe.throw(_("You are not permitted to update this document"), frappe.PermissionError)
+	if form.name:
+		# The share key admits a write here only (see EsignWebForm.has_web_form_permission).
+		frappe.flags.esign_key_write = True
+		try:
+			allowed = wf.has_web_form_permission(doctype, form.name, "write")
+		finally:
+			frappe.flags.esign_key_write = False
+		if not allowed and not frappe.has_permission(doctype, "write", form.name):
+			frappe.throw(_("You are not permitted to update this document"), frappe.PermissionError)
+
+	# The address the signing link was sent to, when the link binds it to this document. With
+	# Require Verified Email, a link without a valid binding (or a new document, which no
+	# link names) is refused here, before anything is written.
+	bound_email = _require_bound_email(
+		wf,
+		doctype,
+		form.name,
+		extract_param_from_referrer("email"),
+		extract_param_from_referrer(EMAIL_BINDING_PARAM),
+	)
+
+	# Consent to sign electronically (ESIGN Act, UETA): the signer ticks it on the signing
+	# page, and the text they agreed to is recorded with the time it was received.
+	consent_text = get_consent_text(wf)
+	if not cint(esign_consent):
+		frappe.throw(
+			_("To sign, tick the box: {0}").format(consent_text),
+			title=_("Consent Required"),
+		)
+	consent_timestamp = now()
 
 	# Now proceed with the form submission using ignore_permissions
 	files = []
@@ -1388,6 +1633,11 @@ def accept(web_form: str, data: str):
 					files_to_delete.append(doc.get(fieldname))
 
 			doc.set(fieldname, value)
+
+		# The verified address replaces whatever was submitted in the email field: the page
+		# shows it read-only, and a request that changed it is not believed.
+		if bound_email and wf.esign_require_verified_email and (email_fieldname := _email_fieldname(wf)):
+			doc.set(email_fieldname, bound_email)
 
 		# Apply eSign field update if configured
 		if wf.esign_update_field and wf.esign_update_value is not None:
@@ -1464,7 +1714,7 @@ def accept(web_form: str, data: str):
 	frappe.flags.web_form_doc = doc
 
 	# Enqueue PDF attachment as background job
-	_enqueue_print_attachment(doc, wf)
+	_enqueue_print_attachment(doc, wf, bound_email, consent_text, consent_timestamp)
 
 	# Clean up any local message log
 	frappe.local.message_log = None

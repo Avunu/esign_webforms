@@ -149,8 +149,12 @@ declare global {
 			esign_update_value?: string | null;
 			/** Signer Name Field · Select · Custom Field, esign_webforms/esign_webforms/esign/custom/web_form.json */
 			esign_signer_name_field?: string | null;
+			/** Require Verified Email · Check · Custom Field, esign_webforms/esign_webforms/esign/custom/web_form.json */
+			esign_require_verified_email?: 0 | 1;
 			/** Signer Email Field · Select · Custom Field, esign_webforms/esign_webforms/esign/custom/web_form.json */
 			esign_signer_email_field?: string | null;
+			/** Consent Text · Small Text · Custom Field, esign_webforms/esign_webforms/esign/custom/web_form.json */
+			esign_consent_text?: string | null;
 			/** Send Notification on Response · Check · Custom Field, esign_webforms/esign_webforms/esign/custom/web_form.json */
 			esign_send_notification?: 0 | 1;
 			/** Notification · Link → Notification · Custom Field, esign_webforms/esign_webforms/esign/custom/web_form.json */

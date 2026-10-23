@@ -2,22 +2,22 @@
 	{
 		"name": "audit-trail",
 		"theme": "dark",
-		"alt": "A signed agreement's timeline: the eSign card naming the signer, with the PDF's SHA-256 hash, the signer's email, IP address, web form, signed fields and browser",
+		"alt": "A signed agreement's timeline: the eSign card naming the signer, with the PDF's SHA-256 hash, the signer's email verified via the recipient link, IP address, web form, signed fields, the consent they gave and their browser",
 		"featured": true,
 		"readme": "feature",
 		"width": 2880,
 		"height": 1800,
-		"sha256": "98f589f2a6959029e303ac189efc2a188adab504c42521b4708ff032366ad624"
+		"sha256": "5d2f4e87994ac946b46404a0b8d9674d10adc4d22782a5506eba32f0551fc24a"
 	},
 	{
 		"name": "audit-trail",
 		"theme": "light",
-		"alt": "A signed agreement's timeline: the eSign card naming the signer, with the PDF's SHA-256 hash, the signer's email, IP address, web form, signed fields and browser",
+		"alt": "A signed agreement's timeline: the eSign card naming the signer, with the PDF's SHA-256 hash, the signer's email verified via the recipient link, IP address, web form, signed fields, the consent they gave and their browser",
 		"featured": true,
 		"readme": "feature",
 		"width": 2880,
 		"height": 1800,
-		"sha256": "5efc1116a089533a39a51dbb8fa5ce0ba5765c8d8f2d26c42e023dd1d12e5eb8"
+		"sha256": "9bb1ac88c670c30261f09b3dfb133fd5b6c3be8fc84c9e65d8635ed72769cb7b"
 	},
 	{
 		"name": "send-for-esign",
@@ -47,36 +47,36 @@
 		"readme": "feature",
 		"width": 2880,
 		"height": 1800,
-		"sha256": "603ff331d5a97039835ad75ba8ec0eb0d2159b943cc324bd112d9f098456d615"
+		"sha256": "7026bc844d96102e6e4876861fc1085293c3254ee3604b17c86854b3f7ac7375"
 	},
 	{
 		"name": "signer-settings",
 		"theme": "dark",
-		"alt": "The eSign web form's settings: Submit on Response, Set Property After Response, and the Signer Name Field and Signer Email Field that name the form fields the audit trail records",
+		"alt": "The eSign web form's settings: Submit on Response, Set Property After Response, the Signer Name Field and Signer Email Field that name the form fields the audit trail records, Require Verified Email and the Consent Text",
 		"featured": false,
 		"readme": "feature",
 		"width": 2880,
 		"height": 1800,
-		"sha256": "73c89ccda81ba499cc663a196e2207d29c82bef378399ea5867be9d269c04445"
+		"sha256": "05376313cf29c36c41140e6d4b0c3c6f608560c4fe686f06685d4e7f96e76b33"
 	},
 	{
 		"name": "signer-settings",
 		"theme": "light",
-		"alt": "The eSign web form's settings: Submit on Response, Set Property After Response, and the Signer Name Field and Signer Email Field that name the form fields the audit trail records",
+		"alt": "The eSign web form's settings: Submit on Response, Set Property After Response, the Signer Name Field and Signer Email Field that name the form fields the audit trail records, Require Verified Email and the Consent Text",
 		"featured": false,
 		"readme": "feature",
 		"width": 2880,
 		"height": 1800,
-		"sha256": "c65e2399ef5c33db0982a7501a25966c6666530bb38dadc5949bd53b8706e3b0"
+		"sha256": "546f0a7ad679e901565ba94365e28abde6417ed73b406040bb470b8dd840d409"
 	},
 	{
 		"name": "signing-page",
 		"theme": "light",
-		"alt": "The signing page: the agreement in its print format, and the signer's name, email and typed signature in the form beside it",
+		"alt": "The signing page: the agreement in its print format, and the signer's name, email, typed signature and the ticked consent to sign electronically in the form beside it",
 		"featured": true,
 		"readme": "hero",
 		"width": 2880,
 		"height": 1800,
-		"sha256": "ad6b040f312549de8ea5c5684fc65849c887b8c7202825cadb339658f3ddf584"
+		"sha256": "84408b76e1c636252a09178dcc086067c03875fd295899957179c7445438b989"
 	}
 ]

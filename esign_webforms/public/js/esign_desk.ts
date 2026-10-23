@@ -12,6 +12,7 @@ interface EsignWebFormRow {
 	title: string;
 	route: string;
 	print_format: string | null;
+	esign_require_verified_email: 0 | 1;
 }
 
 /** A MultiSelect suggestion. */
@@ -394,8 +395,17 @@ class ESignDialog {
 						if (!preview || !("$wrapper" in preview)) {
 							return;
 						}
+						const verified = this.web_forms.find((wf) => wf.name === web_form)?.esign_require_verified_email;
+						// A web form that requires a verified email signs only through a link bound
+						// to its recipient, so the preview (bound to nobody) would not open it.
+						const note = verified
+							? `<p class="text-muted small">${__(
+									"This web form requires a verified email: each recipient in To gets their own email, with a link bound to their address. CC, BCC and Send me a copy are not available.",
+								)}</p>`
+							: "";
 						preview.$wrapper.html(
-							`<p><strong>eSign Link:</strong></p>
+							`<p><strong>${__("eSign Link")}:</strong></p>
+							${note}
 							<div style="background: var(--control-bg); padding: 10px; border-radius: var(--border-radius); word-break: break-all;">
 								<a href="${r.message}" target="_blank">${r.message}</a>
 							</div>`,
