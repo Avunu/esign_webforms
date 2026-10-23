@@ -29,6 +29,14 @@ from frappe.www.printview import validate_print_permission
 # offers only these.
 UPDATE_FIELD_TYPES = ("Select", "Link", "Data", "Text")
 
+# The field types the Signer Name Field and Signer Email Field (esign_signer_name_field,
+# esign_signer_email_field) can name; web_form.js offers only the form's fields of these types.
+SIGNER_FIELD_TYPES = ("Data",)
+
+# The longest signer name recorded, as frappe's User full_name and Communication
+# sender_full_name hold it.
+SIGNER_NAME_LENGTH = 140
+
 
 class PrintHtmlResponse(TypedDict):
 	"""Response from get_print_html endpoint."""
@@ -138,6 +146,18 @@ def _find_email_fieldname(wf: EsignWebForm) -> str | None:
 	return None
 
 
+def _signer_fieldname(wf: EsignWebForm, setting: str) -> str | None:
+	"""The fieldname a Signer Name or Signer Email Field setting names, if it is still one of
+	the web form's Data fields (the form may have changed since the setting was saved)."""
+	fieldname = wf.get(setting)
+	if not fieldname:
+		return None
+	for field in wf.web_form_fields:
+		if _fieldname(field) == fieldname and field.fieldtype in SIGNER_FIELD_TYPES:
+			return fieldname
+	return None
+
+
 class EsignWebForm(BaseWebForm):
 	"""eSign behaviour for Web Form, registered through `extend_doctype_class`.
 
@@ -153,6 +173,9 @@ class EsignWebForm(BaseWebForm):
 	# A Select whose options are the target doctype's fields, set at runtime (web_form.js).
 	esign_update_field: DF.Data | None
 	esign_update_value: DF.Data | None
+	# Selects whose options are the web form's own Data fields, set at runtime (web_form.js).
+	esign_signer_name_field: DF.Data | None
+	esign_signer_email_field: DF.Data | None
 	esign_submit_on_response: DF.Check | None
 	esign_send_notification: DF.Check | None
 	esign_notification: DF.Link | None
@@ -273,10 +296,13 @@ class EsignWebForm(BaseWebForm):
 		form_fields.add("doctype")
 		context.reference_doc = {k: v for k, v in doc.as_dict().items() if k in form_fields}
 
-		# Pre-fill email field from URL param (e.g. when link was sent via email)
+		# Pre-fill email field from URL param (e.g. when link was sent via email). This only
+		# fills the form: the signer can change it, and what is saved is what they submit.
 		email_param = frappe.form_dict.get("email", "")
 		if email_param:
-			email_fieldname = _find_email_fieldname(self)
+			email_fieldname = _signer_fieldname(self, "esign_signer_email_field") or _find_email_fieldname(
+				self
+			)
 			if email_fieldname and email_fieldname in form_fields:
 				context.reference_doc[email_fieldname] = email_param
 
@@ -340,6 +366,7 @@ class EsignWebForm(BaseWebForm):
 		if self.esign_enabled:
 			self.allow_edit = True
 			self.validate_update_field()
+			self.validate_signer_fields()
 
 	def validate_update_field(self):
 		"""Refuse a Set Property After Response field that accept would not set."""
@@ -354,6 +381,36 @@ class EsignWebForm(BaseWebForm):
 					_(df.fieldtype),
 				)
 			)
+
+	def validate_signer_fields(self):
+		"""Refuse a Signer Name or Signer Email Field that is not a Data field of this form.
+
+		The audit trail only records what the signer typed into the form, so the field has to
+		be one of the web form's own fields.
+		"""
+		form_fieldtypes = {
+			fieldname: field.fieldtype for field in self.web_form_fields if (fieldname := _fieldname(field))
+		}
+		for setting, label in (
+			("esign_signer_name_field", _("Signer Name Field")),
+			("esign_signer_email_field", _("Signer Email Field")),
+		):
+			fieldname = self.get(setting)
+			if not fieldname:
+				continue
+			if fieldname not in form_fieldtypes:
+				frappe.throw(
+					_("{0} must be one of this web form's fields, not {1}.").format(label, fieldname)
+				)
+			if form_fieldtypes[fieldname] not in SIGNER_FIELD_TYPES:
+				frappe.throw(
+					_("{0} can only be a {1} field, not {2} ({3}).").format(
+						label,
+						", ".join(_(fieldtype) for fieldtype in SIGNER_FIELD_TYPES),
+						fieldname,
+						_(form_fieldtypes[fieldname]),
+					)
+				)
 
 	def has_web_form_permission(self, doctype, name, ptype="read"):
 		"""Override to allow eSign access for Guest users with valid keys"""
@@ -376,6 +433,17 @@ class EsignWebForm(BaseWebForm):
 
 		# Fall back to parent method
 		return super().has_web_form_permission(doctype, name, ptype)
+
+
+def _signer_field_value(doc: Document, wf: EsignWebForm, setting: str) -> str | None:
+	"""The value the signer submitted in the field a Signer Name or Signer Email Field setting
+	names, stripped, or None when the setting is unset or the field is empty."""
+	fieldname = _signer_fieldname(wf, setting)
+	if not fieldname:
+		return None
+	value = doc.get(fieldname)
+	value = " ".join(str(value).split()) if value else ""
+	return value or None
 
 
 def _get_esign_web_form(web_form: EsignWebForm | str, doctype: str) -> EsignWebForm | None:
@@ -1094,13 +1162,27 @@ def _get_client_ip() -> str | None:
 	return getattr(frappe.request, "remote_addr", None)
 
 
+def _is_single_email(value: str | None) -> bool:
+	"""Whether value is one valid email address. validate_email_address accepts a list of
+	them, separated by commas, and returns the valid ones joined the same way."""
+	if not value or "," in value:
+		return False
+	return validate_email_address(value) == value
+
+
 def _collect_audit_data(doc: Document, wf: EsignWebForm, print_format: str) -> AuditData:
 	"""Collect audit trail data at the moment of signing.
 
 	Signer email resolution order:
-		1. ``email`` URL search param (set when the eSign link was emailed)
-		2. A Data field with Options="Email" on the web form (filled by the signer)
-		3. The logged-in Frappe user (if not Guest)
+		1. With a Signer Email Field set on the web form, the valid address the signer
+		submitted in it; the link's ``email`` parameter is then not used
+		2. Without one, the ``email`` URL search param (set when the eSign link was emailed)
+		3. Without one, a Data field with Options="Email" on the web form (filled by the signer)
+		4. The logged-in Frappe user (if not Guest)
+
+	Signer name resolution order:
+		1. The web form's Signer Name Field (what the signer typed)
+		2. The full name of the User with the signer's email
 	"""
 	# Get IP address from various possible headers (proxy-aware)
 	ip_address = _get_client_ip()
@@ -1112,27 +1194,38 @@ def _collect_audit_data(doc: Document, wf: EsignWebForm, print_format: str) -> A
 
 	# --- Resolve signer email ---
 	signer_email = None
-	signer_name = None
 
-	# 1. From the email URL search param (link was sent via email)
-	# The parameter is the signer's own input, so only a valid address is recorded.
-	email_param = extract_param_from_referrer("email")
-	if email_param and validate_email_address(email_param) == email_param:
-		signer_email = email_param
+	if _signer_fieldname(wf, "esign_signer_email_field"):
+		# 1. The web form names the field the signer's email is in: record only what the
+		# signer submitted there. It is their own input, so only a valid address is recorded.
+		field_email = _signer_field_value(doc, wf, "esign_signer_email_field")
+		if _is_single_email(field_email):
+			signer_email = field_email
+	else:
+		# 2. From the email URL search param (link was sent via email)
+		# The parameter is the signer's own input, so only a valid address is recorded.
+		email_param = extract_param_from_referrer("email")
+		if _is_single_email(email_param):
+			signer_email = email_param
 
-	# 2. From a Data(Email) field on the web form
-	if not signer_email:
-		email_fieldname = _find_email_fieldname(wf)
-		if email_fieldname:
-			field_value = doc.get(email_fieldname)
-			signer_email = str(field_value) if field_value else None
+		# 3. From a Data(Email) field on the web form
+		if not signer_email:
+			email_fieldname = _find_email_fieldname(wf)
+			if email_fieldname:
+				field_value = doc.get(email_fieldname)
+				signer_email = str(field_value) if field_value else None
 
-	# 3. Fall back to the logged-in user
+	# 4. Fall back to the logged-in user
 	if not signer_email and frappe.session.user and frappe.session.user != "Guest":
 		signer_email = frappe.session.user
 
-	# Resolve signer name from user record when we have an email that matches a User
-	if signer_email:
+	# The name the signer typed into the web form's Signer Name Field
+	signer_name = _signer_field_value(doc, wf, "esign_signer_name_field")
+	if signer_name:
+		signer_name = signer_name[:SIGNER_NAME_LENGTH]
+
+	# Otherwise the full name of the User the signer's email belongs to
+	if not signer_name and signer_email:
 		try:
 			user_doc = cast(User, frappe.get_cached_doc("User", signer_email))
 			signer_name = user_doc.full_name if user_doc else None

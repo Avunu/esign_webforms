@@ -147,6 +147,10 @@ declare global {
 			esign_update_field?: string | null;
 			/** Value To Be Set · Data · Custom Field, esign_webforms/esign_webforms/esign/custom/web_form.json */
 			esign_update_value?: string | null;
+			/** Signer Name Field · Select · Custom Field, esign_webforms/esign_webforms/esign/custom/web_form.json */
+			esign_signer_name_field?: string | null;
+			/** Signer Email Field · Select · Custom Field, esign_webforms/esign_webforms/esign/custom/web_form.json */
+			esign_signer_email_field?: string | null;
 			/** Send Notification on Response · Check · Custom Field, esign_webforms/esign_webforms/esign/custom/web_form.json */
 			esign_send_notification?: 0 | 1;
 			/** Notification · Link → Notification · Custom Field, esign_webforms/esign_webforms/esign/custom/web_form.json */

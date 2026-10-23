@@ -74,9 +74,51 @@
     {
       "depends_on": "eval:doc.esign_enabled==1",
       "dt": "Web Form",
-      "fieldname": "esign_notification_section",
+      "fieldname": "esign_signer_section",
       "fieldtype": "Section Break",
       "insert_after": "esign_update_value",
+      "is_system_generated": 0,
+      "label": "Signer",
+      "module": "eSign",
+      "name": "Web Form-esign_signer_section"
+    },
+    {
+      "description": "The form field the signer types their name into. Its value is recorded as the signer's name in the audit trail.",
+      "dt": "Web Form",
+      "fieldname": "esign_signer_name_field",
+      "fieldtype": "Select",
+      "insert_after": "esign_signer_section",
+      "is_system_generated": 0,
+      "label": "Signer Name Field",
+      "module": "eSign",
+      "name": "Web Form-esign_signer_name_field"
+    },
+    {
+      "dt": "Web Form",
+      "fieldname": "esign_signer_column_break",
+      "fieldtype": "Column Break",
+      "insert_after": "esign_signer_name_field",
+      "is_system_generated": 0,
+      "module": "eSign",
+      "name": "Web Form-esign_signer_column_break"
+    },
+    {
+      "description": "The form field the signer types their email into. A valid address in it is recorded as the signer's email in the audit trail.",
+      "dt": "Web Form",
+      "fieldname": "esign_signer_email_field",
+      "fieldtype": "Select",
+      "insert_after": "esign_signer_column_break",
+      "is_system_generated": 0,
+      "label": "Signer Email Field",
+      "module": "eSign",
+      "name": "Web Form-esign_signer_email_field"
+    },
+    {
+      "depends_on": "eval:doc.esign_enabled==1",
+      "dt": "Web Form",
+      "fieldname": "esign_notification_section",
+      "fieldtype": "Section Break",
+      "insert_after": "esign_signer_email_field",
       "is_system_generated": 0,
       "label": "Notification Settings",
       "module": "eSign",

@@ -63,6 +63,17 @@ def fake_attach_print(**kwargs: Any) -> dict:
 	return {"fname": f"{kwargs['file_name']}.pdf", "fcontent": PDF}
 
 
+def add_signer_fields(
+	wf: EsignWebForm, name: str | None = "signer_name", email: str | None = "signer_email"
+) -> None:
+	"""Add a Full Name field to the test web form and name the form's signer fields."""
+	if not any(row.get("fieldname") == "signer_name" for row in wf.web_form_fields):
+		wf.append("web_form_fields", {"fieldname": "signer_name", "fieldtype": "Data", "label": "Full Name"})
+	wf.esign_signer_name_field = name
+	wf.esign_signer_email_field = email
+	wf.save(ignore_permissions=True)
+
+
 class EsignTestCase(IntegrationTestCase):
 	def setUp(self) -> None:
 		# Idempotent: the doctype and users are created once per site and kept.
@@ -109,6 +120,30 @@ class TestEsignWebFormController(EsignTestCase):
 		wf.esign_update_field = "status"
 		wf.save(ignore_permissions=True)
 		self.assertEqual(self.reload_web_form().esign_update_field, "status")
+
+	def test_signer_fields_must_be_data_fields_of_the_form(self):
+		wf = self.reload_web_form()
+		add_signer_fields(wf)
+		wf = self.reload_web_form()
+		self.assertEqual(wf.esign_signer_name_field, "signer_name")
+		self.assertEqual(wf.esign_signer_email_field, "signer_email")
+
+		# A field of the doctype that is not on the form: its value is not the signer's input.
+		wf.esign_signer_name_field = "title"
+		with self.assertRaisesRegex(frappe.ValidationError, "must be one of this web form's fields"):
+			wf.save(ignore_permissions=True)
+
+		# A field on the form that is not a Data field.
+		wf = self.reload_web_form()
+		wf.esign_signer_email_field = "signature"
+		with self.assertRaisesRegex(frappe.ValidationError, "can only be a Data field"):
+			wf.save(ignore_permissions=True)
+
+		# Unset is allowed.
+		wf = self.reload_web_form()
+		wf.esign_signer_name_field = None
+		wf.esign_signer_email_field = ""
+		wf.save(ignore_permissions=True)
 
 	def test_signature_exists_only_when_every_signature_field_is_signed(self):
 		wf = self.reload_web_form()
@@ -233,6 +268,19 @@ class TestSigningPage(EsignTestCase):
 		self.assertIn("esign-fonts.bundle.css", content)
 		self.assertIn("frappe.utils.print_format.download_pdf", content)
 		self.assertNotIn("esign-completed", content)
+
+	def test_email_parameter_prefills_the_signer_email_field(self):
+		wf = self.reload_web_form()
+		wf.append("web_form_fields", {"fieldname": "title", "fieldtype": "Data", "label": "Your Email"})
+		add_signer_fields(wf, name=None, email="title")
+		frappe.set_user("Guest")
+		with patch(
+			"frappe.website.doctype.web_form.web_form.WebForm.add_custom_context_and_script"
+		) as custom:
+			self.render(key=self.key, email="prefill@example.com")
+		context = custom.call_args.args[0]
+		self.assertEqual(context.reference_doc["title"], "prefill@example.com")
+		self.assertNotEqual(context.reference_doc.get("signer_email"), "prefill@example.com")
 
 	def test_guest_without_key_is_refused(self):
 		frappe.set_user("Guest")
@@ -739,6 +787,80 @@ class TestAccept(EsignTestCase):
 		self.assertEqual(audit["ip_address"], "127.0.0.1")
 		self.assertIsNone(audit["user_agent"])
 
+	def test_guest_signer_name_and_email_come_from_the_signer_fields(self):
+		add_signer_fields(self.reload_web_form())
+		frappe.set_user("Guest")
+		result, enqueue = self.accept(
+			form_data(
+				self.doc,
+				signature=SIGNATURE,
+				signer_name="  Ana   Torres ",
+				signer_email="ana.torres@example.com",
+			),
+			key=self.key,
+		)
+		self.assertEqual(result.signer_name, "  Ana   Torres ")
+		audit = enqueue.call_args.kwargs["audit_data"]
+		self.assertEqual(audit["signer_name"], "Ana Torres")
+		self.assertEqual(audit["signer_email"], "ana.torres@example.com")
+
+	def test_signer_fields_are_not_overridden_by_the_link(self):
+		add_signer_fields(self.reload_web_form())
+		wf = self.reload_web_form()
+		self.doc.signer_name = "Ana Torres"
+		self.doc.signer_email = "ana.torres@example.com"
+		frappe.set_user("Guest")
+		# The link's email parameter does not replace what the signer submitted.
+		with signing_request(referrer="https://example.com/form?email=param%40example.com"):
+			audit = esign_web_form._collect_audit_data(self.doc, wf, "Standard")
+		self.assertEqual(audit["signer_email"], "ana.torres@example.com")
+		self.assertEqual(audit["signer_name"], "Ana Torres")
+
+		# Nor does it fill in for an invalid or empty address in the signer email field.
+		for value in ("not an email", "a@example.com, b@example.com", None):
+			with self.subTest(value=value):
+				self.doc.signer_email = value
+				with signing_request(referrer="https://example.com/form?email=param%40example.com"):
+					audit = esign_web_form._collect_audit_data(self.doc, wf, "Standard")
+				self.assertIsNone(audit["signer_email"])
+				self.assertEqual(audit["signer_name"], "Ana Torres")
+
+	def test_signer_fields_fall_back_when_empty_or_unset(self):
+		add_signer_fields(self.reload_web_form())
+		wf = self.reload_web_form()
+		# An empty name field falls back to the User the signer's email belongs to.
+		self.doc.signer_name = "   "
+		self.doc.signer_email = SIGNER
+		with signing_request():
+			audit = esign_web_form._collect_audit_data(self.doc, wf, "Standard")
+		self.assertEqual(audit["signer_email"], SIGNER)
+		self.assertEqual(audit["signer_name"], "esign-signer")
+
+		# An empty email field falls back to the logged-in user.
+		self.doc.signer_email = None
+		frappe.set_user(SIGNER)
+		with signing_request():
+			audit = esign_web_form._collect_audit_data(self.doc, wf, "Standard")
+		self.assertEqual(audit["signer_email"], SIGNER)
+
+		# A long name is cut to what the Communication's sender name holds.
+		self.doc.signer_name = "A" * 300
+		with signing_request():
+			audit = esign_web_form._collect_audit_data(self.doc, wf, "Standard")
+		self.assertEqual(audit["signer_name"], "A" * esign_web_form.SIGNER_NAME_LENGTH)
+
+		# A setting naming a field the form no longer has is ignored, as if unset.
+		frappe.set_user("Guest")
+		wf.web_form_fields = [row for row in wf.web_form_fields if row.get("fieldname") != "signer_name"]
+		wf.esign_signer_email_field = "title"
+		self.doc.signer_name = "Ana Torres"
+		self.doc.title = "ana.torres@example.com"
+		self.doc.signer_email = "field@example.com"
+		with signing_request(referrer="https://example.com/form?email=param%40example.com"):
+			audit = esign_web_form._collect_audit_data(self.doc, wf, "Standard")
+		self.assertEqual(audit["signer_email"], "param@example.com")
+		self.assertIsNone(audit["signer_name"])
+
 	def test_client_ip_headers_in_order(self):
 		with signing_request(headers={"CF-Connecting-IP": "198.51.100.1", "X-Real-IP": "198.51.100.2"}):
 			self.assertEqual(esign_web_form._get_client_ip(), "198.51.100.1")
@@ -821,6 +943,8 @@ class TestSigningJobs(EsignTestCase):
 		self.assertEqual(audit["file_name"], files[0].file_name)
 		self.assertEqual(len(audit["pdf_hash"]), 64)
 		self.assertEqual(comm.sender, "signer@example.com")
+		self.assertEqual(audit["signer_name"], "Sam Signer")
+		self.assertEqual(comm.sender_full_name, "Sam Signer")
 
 		copy = frappe.get_all(
 			"File",
@@ -847,6 +971,7 @@ class TestSigningJobs(EsignTestCase):
 		self.assertEqual(mail["subject"], "Signed: Service agreement")
 		self.assertIn(f"{self.doc.name} was signed", mail["message"])
 		self.assertIn("eSign Audit Trail", mail["message"])
+		self.assertIn("Sam Signer", mail["message"])
 		self.assertIn("&lt;b&gt;TestBrowser&lt;/b&gt;", mail["message"])
 		self.assertNotIn("<b>TestBrowser</b>", mail["message"])
 		self.assertIn("PDF SHA-256", mail["message"])

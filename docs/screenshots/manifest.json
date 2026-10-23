@@ -2,22 +2,22 @@
 	{
 		"name": "audit-trail",
 		"theme": "dark",
-		"alt": "A signed agreement's timeline: the eSign card with the PDF's SHA-256 hash, the signer's email, IP address, web form, signed fields and browser",
+		"alt": "A signed agreement's timeline: the eSign card naming the signer, with the PDF's SHA-256 hash, the signer's email, IP address, web form, signed fields and browser",
 		"featured": true,
 		"readme": "feature",
 		"width": 2880,
 		"height": 1800,
-		"sha256": "bd6a91fb9e16bac8bd6edecda59d01a635af43a9ca798777c459856bb4a6e7de"
+		"sha256": "98f589f2a6959029e303ac189efc2a188adab504c42521b4708ff032366ad624"
 	},
 	{
 		"name": "audit-trail",
 		"theme": "light",
-		"alt": "A signed agreement's timeline: the eSign card with the PDF's SHA-256 hash, the signer's email, IP address, web form, signed fields and browser",
+		"alt": "A signed agreement's timeline: the eSign card naming the signer, with the PDF's SHA-256 hash, the signer's email, IP address, web form, signed fields and browser",
 		"featured": true,
 		"readme": "feature",
 		"width": 2880,
 		"height": 1800,
-		"sha256": "dad94cc41f84272dd348684a0fad913c2d3f6331ba6a7a0e9e703084504eae16"
+		"sha256": "5efc1116a089533a39a51dbb8fa5ce0ba5765c8d8f2d26c42e023dd1d12e5eb8"
 	},
 	{
 		"name": "send-for-esign",
@@ -48,6 +48,26 @@
 		"width": 2880,
 		"height": 1800,
 		"sha256": "b61d5ba5433a8b3db74386a804ec5cb504a0a99aff61262176e6ac10248f8fdc"
+	},
+	{
+		"name": "signer-settings",
+		"theme": "dark",
+		"alt": "The eSign web form's settings: Submit on Response, Set Property After Response, and the Signer Name Field and Signer Email Field that name the form fields the audit trail records",
+		"featured": false,
+		"readme": "feature",
+		"width": 2880,
+		"height": 1800,
+		"sha256": "73c89ccda81ba499cc663a196e2207d29c82bef378399ea5867be9d269c04445"
+	},
+	{
+		"name": "signer-settings",
+		"theme": "light",
+		"alt": "The eSign web form's settings: Submit on Response, Set Property After Response, and the Signer Name Field and Signer Email Field that name the form fields the audit trail records",
+		"featured": false,
+		"readme": "feature",
+		"width": 2880,
+		"height": 1800,
+		"sha256": "c65e2399ef5c33db0982a7501a25966c6666530bb38dadc5949bd53b8706e3b0"
 	},
 	{
 		"name": "signing-page",

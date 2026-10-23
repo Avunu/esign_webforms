@@ -22,6 +22,7 @@ class Agreement(Document):
 	documents are plain Documents at runtime and this class is never instantiated."""
 
 	title: str | None
+	signer_name: str | None
 	signer_email: str | None
 	signature: str | None
 	status: str | None
@@ -64,6 +65,12 @@ def ensure_test_doctype() -> None:
 			"autoname": "hash",
 			"fields": [
 				{"fieldname": "title", "fieldtype": "Data", "label": "Title"},
+				{
+					"fieldname": "signer_name",
+					"fieldtype": "Data",
+					"label": "Signer Name",
+					"allow_on_submit": 1,
+				},
 				{
 					"fieldname": "signer_email",
 					"fieldtype": "Data",

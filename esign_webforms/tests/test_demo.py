@@ -27,7 +27,14 @@ class TestDemo(IntegrationTestCase):
 		web_form = frappe.db.get_value(
 			"Web Form",
 			demo.WEB_FORM,
-			["doc_type", "esign_enabled", "print_format", "esign_update_field"],
+			[
+				"doc_type",
+				"esign_enabled",
+				"print_format",
+				"esign_update_field",
+				"esign_signer_name_field",
+				"esign_signer_email_field",
+			],
 			as_dict=True,
 		)
 		assert web_form is not None
@@ -35,6 +42,8 @@ class TestDemo(IntegrationTestCase):
 		self.assertEqual(web_form.esign_enabled, 1)
 		self.assertEqual(web_form.print_format, demo.PRINT_FORMAT)
 		self.assertEqual(web_form.esign_update_field, "status")
+		self.assertEqual(web_form.esign_signer_name_field, "signer_name")
+		self.assertEqual(web_form.esign_signer_email_field, "signer_email")
 		self.assertEqual(frappe.db.get_value("Email Template", demo.EMAIL_TEMPLATE, "esign_request"), 1)
 
 	def test_unsigned_agreement_waits_for_a_signature(self):
@@ -73,6 +82,7 @@ class TestDemo(IntegrationTestCase):
 		assert isinstance(content, str)
 		audit = json.loads(content)
 		self.assertEqual(audit["signer_email"], demo.SIGNER_EMAIL)
+		self.assertEqual(audit["signer_name"], "Dana Whitfield")
 		self.assertEqual(audit["timestamp"], "2026-01-15 10:42:15")
 		self.assertEqual(len(audit["pdf_hash"]), 64)
 
