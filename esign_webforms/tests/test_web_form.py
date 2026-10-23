@@ -99,6 +99,7 @@ class EsignTestCase(IntegrationTestCase):
 		frappe.local.request = None
 		frappe.local.form_dict = frappe._dict()
 		frappe.flags.ignore_print_permissions = False
+		frappe.flags.esign_key_write = False
 		frappe.local.message_log = []
 
 	def reload_web_form(self) -> EsignWebForm:
@@ -225,8 +226,22 @@ class TestKeyValidation(EsignTestCase):
 		wf = self.reload_web_form()
 		frappe.set_user("Guest")
 		with signing_request(referrer=f"https://example.com/{WEB_FORM_ROUTE}/x/edit?key={self.key}"):
-			self.assertTrue(wf.has_web_form_permission(TEST_DOCTYPE, self.doc.name, "write"))
+			self.assertTrue(wf.has_web_form_permission(TEST_DOCTYPE, self.doc.name))
 			self.assertEqual(frappe.form_dict.key, self.key)
+
+	def test_share_key_writes_only_through_esign_accept(self):
+		# frappe's own web form accept asks for write permission too; the key must not answer
+		# it there, or a guest could skip the consent and the recipient binding.
+		wf = self.reload_web_form()
+		frappe.set_user("Guest")
+		with signing_request(key=self.key):
+			self.assertTrue(wf.has_web_form_permission(TEST_DOCTYPE, self.doc.name, "read"))
+			self.assertFalse(wf.has_web_form_permission(TEST_DOCTYPE, self.doc.name, "write"))
+			frappe.flags.esign_key_write = True
+			try:
+				self.assertTrue(wf.has_web_form_permission(TEST_DOCTYPE, self.doc.name, "write"))
+			finally:
+				frappe.flags.esign_key_write = False
 
 	def test_has_web_form_permission_falls_back_on_a_bad_key(self):
 		wf = self.reload_web_form()
@@ -381,6 +396,28 @@ class TestEsignLink(EsignTestCase):
 	def test_link_from_a_request_payload(self):
 		payload = json.dumps({"doctype": TEST_DOCTYPE, "name": self.doc.name})
 		self.assert_valid_link(get_esign_link(payload, self.web_form_name))
+
+	def test_request_payload_never_gets_a_binding(self):
+		# Over HTTP the caller, not the recipient, holds the link: a binding would let anyone
+		# with email permission sign as any address, verified.
+		for payload in (
+			json.dumps({"doctype": TEST_DOCTYPE, "name": self.doc.name}),
+			{"doctype": TEST_DOCTYPE, "name": self.doc.name},
+		):
+			with self.subTest(payload=type(payload).__name__):
+				link = get_esign_link(payload, self.web_form_name, "", SIGNER)
+				self.assert_valid_link(link)
+				self.assertIn("&email=", link)
+				self.assertNotIn(EMAIL_BINDING_PARAM, link)
+		self.assertIn(EMAIL_BINDING_PARAM, get_esign_link(self.doc, self.web_form_name, "", SIGNER))
+
+	def test_strip_email_binding(self):
+		link = get_esign_link(self.doc, self.web_form_name, "Standard", SIGNER)
+		stripped = esign_web_form.strip_email_binding(link)
+		self.assertNotIn(EMAIL_BINDING_PARAM, stripped)
+		self.assertEqual(stripped, link.split(f"&{EMAIL_BINDING_PARAM}=")[0])
+		unbound = get_esign_link(self.doc, self.web_form_name)
+		self.assertEqual(esign_web_form.strip_email_binding(unbound), unbound)
 
 	def test_request_payload_needs_email_permission(self):
 		frappe.set_user(OUTSIDER)
@@ -1353,6 +1390,24 @@ class TestVerifiedAccept(EsignTestCase):
 			)
 		self.doc.reload()
 		self.assertFalse(self.doc.signature)
+
+	def test_frappes_own_accept_cannot_skip_the_signing_checks(self):
+		# frappe's web form accept is whitelisted for guests as well. With only a share key it
+		# must not save the document: it checks no consent, no binding and no locked email.
+		from frappe.website.doctype.web_form.web_form import accept as frappe_accept
+
+		self.require_verified_email()
+		frappe.set_user("Guest")
+		referrer = f"https://example.com/{WEB_FORM_ROUTE}/{self.doc.name}/edit?key={self.key}"
+		for request in (signing_request(referrer=referrer), signing_request(key=self.key)):
+			with request, self.assertRaises(frappe.PermissionError):
+				frappe_accept(
+					self.web_form_name, form_data(self.doc, signature=SIGNATURE, signer_email=OUTSIDER)
+				)
+		frappe.set_user("Administrator")
+		self.doc.reload()
+		self.assertFalse(self.doc.signature)
+		self.assertNotEqual(self.doc.signer_email, OUTSIDER)
 
 	def test_required_verified_email_refuses_a_new_document(self):
 		self.require_verified_email()

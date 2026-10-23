@@ -153,31 +153,59 @@ class TestSendEsignEmail(EsignDeskTestCase):
 		self.assertTrue(mail["now"])
 		self.assertIn(result["esign_link"], mail["content"])
 
+	def sent_link(self, call: Any = None) -> str:
+		"""The signing link in the email sendmail was (last) called with."""
+		content = (call or self.sendmail.call_args).kwargs["content"]
+		links = re.findall(r'href="([^"]*/edit\?key=[^"]+)"', content)
+		self.assertEqual(len(links), 1, content)
+		return html.unescape(links[0])
+
 	def test_link_names_and_binds_a_single_recipient(self):
 		result = self.send(recipients="Signer+1@example.com")
+		link = self.sent_link()
+		self.assertIn("&email=Signer%2B1%40example.com", link)
+		self.assertEqual(link_email(link, self.doc.name), "Signer+1@example.com")
+		# The sender's response names the recipient but carries no binding (see below).
 		self.assertIn("&email=Signer%2B1%40example.com", result["esign_link"])
-		self.assertEqual(link_email(result["esign_link"], self.doc.name), "Signer+1@example.com")
-		self.assertIn(result["esign_link"], self.sendmail.call_args.kwargs["content"])
+		self.assertIsNone(link_email(result["esign_link"], self.doc.name))
 
 	def test_link_names_only_the_address_of_a_named_recipient(self):
-		result = self.send(recipients="Dana Signer <dana@example.com>")
-		self.assertIn("&email=dana%40example.com&email_sig=", result["esign_link"])
-		self.assertEqual(link_email(result["esign_link"], self.doc.name), "dana@example.com")
+		self.send(recipients="Dana Signer <dana@example.com>")
+		link = self.sent_link()
+		self.assertIn("&email=dana%40example.com&email_sig=", link)
+		self.assertEqual(link_email(link, self.doc.name), "dana@example.com")
+
+	def test_bound_link_reaches_only_the_recipient(self):
+		# Whoever holds a bound link signs as its recipient, verified: neither the sender's
+		# response nor the Communication, which anyone who reads the document can open,
+		# may carry the binding. Only the email to the recipient does.
+		for verified in (0, 1):
+			with self.subTest(require_verified_email=verified):
+				self.web_form.db_set("esign_require_verified_email", verified)
+				result = self.send(recipients="signer@example.com")
+				self.assertIn("email_sig=", self.sent_link())
+				self.assertIn("&email=signer%40example.com", result["esign_link"])
+				self.assertNotIn("email_sig", result["esign_link"])
+				for name in result["communications"]:
+					content = frappe.db.get_value("Communication", name, "content")
+					self.assertIn("&amp;email=signer%40example.com", content)
+					self.assertNotIn("email_sig", content)
 
 	def test_link_to_several_recipients_names_none(self):
 		result = self.send()
 		self.assertNotIn("&email=", result["esign_link"])
 		self.assertNotIn("email_sig", result["esign_link"])
+		self.assertNotIn("email_sig", self.sent_link())
 
 	def test_link_also_sent_to_others_is_not_bound(self):
 		# Anyone else who gets the message could sign as the recipient with a bound link.
 		for extra in ({"cc": "cc@example.com"}, {"bcc": "bcc@example.com"}, {"send_me_a_copy": 1}):
 			with self.subTest(extra=extra):
-				result = self.send(recipients="signer@example.com", **extra)
-				self.assertIn("&email=signer%40example.com", result["esign_link"])
-				self.assertNotIn("email_sig", result["esign_link"])
-		result = self.send(recipients="signer@example.com", send_me_a_copy="0")
-		self.assertIn("email_sig", result["esign_link"])
+				self.send(recipients="signer@example.com", **extra)
+				self.assertIn("&email=signer%40example.com", self.sent_link())
+				self.assertNotIn("email_sig", self.sent_link())
+		self.send(recipients="signer@example.com", send_me_a_copy="0")
+		self.assertIn("email_sig", self.sent_link())
 
 	def test_verified_email_sends_each_recipient_their_own_link(self):
 		self.web_form.db_set("esign_require_verified_email", 1)
@@ -189,15 +217,14 @@ class TestSendEsignEmail(EsignDeskTestCase):
 		sent = {}
 		for call, name in zip(self.sendmail.call_args_list, result["communications"], strict=True):
 			comm = cast(Communication, frappe.get_doc("Communication", name))
-			links = re.findall(r'href="([^"]+email_sig[^"]+)"', call.kwargs["content"])
-			self.assertEqual(len(links), 1)
-			sent[comm.recipients] = link_email(html.unescape(links[0]), self.doc.name)
+			sent[comm.recipients] = link_email(self.sent_link(call), self.doc.name)
 			self.assertFalse(comm.cc)
 			self.assertFalse(comm.bcc)
 		self.assertEqual(
 			sent, {"Ana <ana@example.com>": "ana@example.com", "ben@example.com": "ben@example.com"}
 		)
-		self.assertEqual(link_email(result["esign_link"], self.doc.name), "ana@example.com")
+		self.assertIn("&email=ana%40example.com", result["esign_link"])
+		self.assertIsNone(link_email(result["esign_link"], self.doc.name))
 
 	def test_verified_email_refuses_copies_and_bad_addresses(self):
 		self.web_form.db_set("esign_require_verified_email", 1)

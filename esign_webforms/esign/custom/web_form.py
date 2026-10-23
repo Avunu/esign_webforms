@@ -4,6 +4,7 @@
 import hashlib
 import hmac
 import json
+import re
 import uuid
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -208,6 +209,13 @@ def make_email_binding(doctype: str, docname: str, email: str) -> str:
 	"""
 	message = "\x00".join((doctype, str(docname), _normalize_email(email))).encode()
 	return hmac.new(_binding_key(), message, hashlib.sha256).hexdigest()
+
+
+def strip_email_binding(link: str) -> str:
+	"""link without its `email_sig` binding, for every copy of it that is not the email to its
+	recipient: the sender's API response and the Communication any reader of the document sees.
+	Whoever holds the binding signs as the recipient, verified."""
+	return re.sub(rf"[?&]{EMAIL_BINDING_PARAM}=[0-9A-Fa-f]*", "", link)
 
 
 def _is_single_email(value: str | None) -> bool:
@@ -546,8 +554,11 @@ class EsignWebForm(BaseWebForm):
 
 	def has_web_form_permission(self, doctype, name, ptype="read"):
 		"""Override to allow eSign access for Guest users with valid keys"""
-		# For eSign forms, check key-based access first
-		if self.esign_enabled and name:
+		# For eSign forms, check key-based access first. The share key lets a signer read the
+		# document anywhere, but write it only through this app's accept, which also checks
+		# the consent and the recipient binding: frappe's own web form accept (whitelisted for
+		# guests too) asks this same question before saving, and would skip both.
+		if self.esign_enabled and name and (ptype == "read" or frappe.flags.esign_key_write):
 			# Try to get the key from form_dict or extract from referrer
 			if not frappe.form_dict.get("key"):
 				frappe.form_dict.key = extract_param_from_referrer("key")
@@ -1081,10 +1092,14 @@ def get_esign_link(
 		web_form_name: Name of the eSign-enabled Web Form
 		print_format_name: Optional print format override
 		recipient_email: Optional email of the intended signer. The link carries it as
-			``&email=`` with an ``&email_sig=`` binding, so the signing page pre-fills the
-			form's email field with it and the audit trail records it as verified by the
-			recipient link. Send such a link to that recipient only.
+			``&email=``, so the signing page pre-fills the form's email field with it. From
+			Jinja or Python (doc is a Document) it also carries an ``&email_sig=`` binding,
+			and the audit trail records the address as verified by the recipient link: send
+			such a link to that recipient only. A request (doc is JSON or a dict) never gets
+			the binding, since the caller, not the recipient, would hold it and could sign
+			as them; send_esign_email emails a bound link instead.
 	"""
+	from_request = not isinstance(doc, Document)
 	if isinstance(doc, str):
 		try:
 			doc = json.loads(doc)
@@ -1102,7 +1117,7 @@ def get_esign_link(
 		# Server-side callers (Jinja, Python) pass the Document itself.
 		frappe.has_permission(doc.doctype, ptype="email", doc=doc, throw=True)
 
-	return build_esign_link(doc, web_form_name, print_format_name, recipient_email)
+	return build_esign_link(doc, web_form_name, print_format_name, recipient_email, bind=not from_request)
 
 
 # Reviewed guest endpoint: validate_esign_access needs the share key, or the web form's or print permission.
@@ -1543,12 +1558,15 @@ def accept(web_form: str, data: str, esign_consent: str | int | None = None):
 	# permission: the three ways frappe's own accept lets an update through (the last one by
 	# saving with permission checks on). Otherwise anyone who knows a document name could
 	# overwrite its form fields.
-	if (
-		form.name
-		and not wf.has_web_form_permission(doctype, form.name, "write")
-		and not frappe.has_permission(doctype, "write", form.name)
-	):
-		frappe.throw(_("You are not permitted to update this document"), frappe.PermissionError)
+	if form.name:
+		# The share key admits a write here only (see EsignWebForm.has_web_form_permission).
+		frappe.flags.esign_key_write = True
+		try:
+			allowed = wf.has_web_form_permission(doctype, form.name, "write")
+		finally:
+			frappe.flags.esign_key_write = False
+		if not allowed and not frappe.has_permission(doctype, "write", form.name):
+			frappe.throw(_("You are not permitted to update this document"), frappe.PermissionError)
 
 	# The address the signing link was sent to, when the link binds it to this document. With
 	# Require Verified Email, a link without a valid binding (or a new document, which no

@@ -152,6 +152,8 @@ def _send_esign_message(
 	email_account: str | None,
 ) -> str:
 	"""Send one eSign request email and record it as a Communication; returns its name."""
+	from esign_webforms.esign.custom.web_form import strip_email_binding
+
 	doctype, name = doc.doctype, doc.name
 
 	# Prepare email content with eSign link
@@ -189,7 +191,9 @@ def _send_esign_message(
 				"sent_or_received": "Sent",
 				"email_status": "Open",
 				"subject": subject,
-				"content": email_content,
+				# The recipient gets the link with its email binding; the record anyone who
+				# reads the document can open keeps the link without it.
+				"content": email_content.replace(esign_link, strip_email_binding(esign_link)),
 				"sender": sender,
 				"email_account": email_account or None,
 				"recipients": ", ".join(recipients_list),
@@ -258,7 +262,7 @@ def send_esign_email(
 	frappe.has_permission(doctype, ptype="email", doc=name, throw=True)
 
 	# Validate web form
-	from esign_webforms.esign.custom.web_form import EsignWebForm
+	from esign_webforms.esign.custom.web_form import EsignWebForm, strip_email_binding
 
 	try:
 		web_form_doc = EsignWebForm("Web Form", web_form)
@@ -333,5 +337,6 @@ def send_esign_email(
 		"message": _("eSign request sent successfully"),
 		"communication": communications[0],
 		"communications": communications,
-		"esign_link": messages[0][1],
+		# Without the binding: only the recipient's email carries it (see strip_email_binding).
+		"esign_link": strip_email_binding(messages[0][1]),
 	}
