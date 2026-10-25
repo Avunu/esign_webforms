@@ -61,10 +61,6 @@ It works with any DocType, standard or custom, that has a Signature field and a 
 
 ## Installation
 
-On Frappe Cloud, install eSign Web Forms from the [Frappe marketplace](https://cloud.frappe.io/marketplace/apps/esign_webforms).
-
-On a bench of your own:
-
 ```bash
 bench get-app https://github.com/Avunu/esign_webforms --branch version-16
 bench --site <site> install-app esign_webforms
