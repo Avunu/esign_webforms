@@ -13,7 +13,7 @@ This page is for the person who signs. You need no account: the link in the emai
 Click **Sign Document** in the email, or the link the sender gave you. The page shows the document on the left and a **Fill and Sign** form on the right. On a phone, the form is below the document, and **Sign Now** at the top takes you to it.
 
 - **Download PDF** at the top downloads the document as it is now, before you sign.
-- If the link was sent to you alone, the form says "Signing as …, verified by your email link" under its title, and your email is already filled in.
+- If the link was sent to you alone, the form says "Signing as …, verified by your email link" under its title, and your email is already filled in if the form asks for it.
 
 ![The signing page: the agreement in its print format, and the signer's name, email, typed signature and the ticked consent to sign electronically in the form beside it](screenshots/signing-page-light.webp)
 

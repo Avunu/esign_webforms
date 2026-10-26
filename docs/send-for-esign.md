@@ -42,7 +42,7 @@ The link opens the document through its share key, which works until it expires 
 - **Several addresses in To.** One email, one link, which names nobody. The signer's email is recorded only from the form's email field, or from their login.
 - **The web form has Require Verified Email.** Each address in **To** gets its own email with its own bound link. **CC**, **BCC** and **Send me a copy** are refused, with "… requires a verified email, so each recipient gets their own signing link. Put everyone who signs in To, and leave CC, BCC and Send me a copy empty."
 
-The binding stays in the recipient's email. The Communication recorded on the document, which anyone who can read the document can open, and the link the dialog previews keep the address but not the binding. [Verified email](verified-email.md) explains what a verified address proves.
+The binding stays in the recipient's email. The Communication recorded on the document, which anyone who can read the document can open, keeps the address but not the binding, and the link the dialog previews carries neither. [Verified email](verified-email.md) explains what a verified address proves.
 
 ## Links in your own templates
 

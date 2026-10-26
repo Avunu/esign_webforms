@@ -28,16 +28,16 @@ The eSign fields appear on the **Web Form** form. **Enable eSign** sits below **
 
 The signing page also uses these standard Web Form fields:
 
-| Field                                                   | Used for                                                                                                                                             |
-| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Select DocType**, **Route**, **Published**            | Which documents the form signs and the address of the signing page. **Send for eSign** offers only published eSign web forms of the DocType.         |
-| Web Form Fields                                         | The fields the signer fills in. Add the Signature field here.                                                                                        |
-| **Print Format**                                        | The format of the preview and of the signed PDF. Shown while **Enable eSign** or **Allow print** is ticked. Empty: Frappe's standard format.         |
-| **Introduction**                                        | Shown under the title of the signing page until the document is signed.                                                                              |
-| **Submit button label**                                 | The label of the submit button. Empty: **Sign & Submit**.                                                                                            |
-| **Success title**, **Success message**, **Success URL** | The card shown after signing, and the page the signer is sent to five seconds later. Empty: **Submitted** and "Thank you for signing this document." |
-| **Allow incomplete forms**                              | Lets a signer submit without the mandatory fields, as on any web form.                                                                               |
-| **Show attachments**                                    | Lists the document's attachments under the form. A guest sees only the public ones, as on any Frappe web form.                                       |
+| Field                                                   | Used for                                                                                                                                                                            |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Select DocType**, **Route**, **Published**            | Which documents the form signs and the address of the signing page. **Send for eSign** offers only published eSign web forms of the DocType.                                        |
+| Web Form Fields                                         | The fields the signer fills in. Add the Signature field here.                                                                                                                       |
+| **Print Format**                                        | The format of the preview and of the signed PDF. Shown while **Enable eSign** or **Allow print** is ticked. Empty: Frappe's standard format.                                        |
+| **Introduction**                                        | Shown under the title of the signing page until the document is signed.                                                                                                             |
+| **Submit button label**                                 | The label of the submit button. Empty: **Sign & Submit**.                                                                                                                           |
+| **Success title**, **Success message**, **Success URL** | The card shown after signing, and the page the signer is sent to five seconds later. Empty: **Submitted** and "Thank you for signing this document."                                |
+| **Allow incomplete forms**                              | Lets a signer submit without the mandatory fields, as on any web form.                                                                                                              |
+| **Show attachments**                                    | Lists the document's attachments under the form. A guest sees only the public ones, as on any Frappe web form. Frappe shows this check box only while **Login required** is ticked. |
 
 ## Email Template
 
@@ -52,6 +52,7 @@ The signing page also uses these standard Web Form fields:
 | **Document Share Key Expiry (in Days)** | System Settings    | How long a signing link works. Each link carries a Frappe Document Share Key, which expires after this many days (30 by default; Frappe uses 90 when it is empty).                                                                       |
 | Outgoing **Email Account**              | Email Account      | The **From** of the **Send for eSign** dialog. It picks the default outgoing account, or the only one there is. When the document has a **Company**, it offers only that company's accounts (ERPNext adds **Company** to Email Account). |
 | `encryption_key`                        | `site_config.json` | The secret that recipient-bound links are signed with, through a key derived from it. Frappe creates it on first use. Changing it invalidates every bound link sent before.                                                              |
+| **Send Print as PDF**                   | Print Settings     | Must stay ticked, as it is by default. Frappe's `attach_print`, which renders the signed copy, makes an HTML file instead of a PDF when it is unticked, and the signing page then finds no signed PDF to show or download.               |
 | Background workers                      | The bench          | The signed PDF, the audit record and the notification are written by jobs on the `short` queue.                                                                                                                                          |
 
 ## Permissions

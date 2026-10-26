@@ -24,17 +24,17 @@ Each signing adds an eSign card to the document's timeline: "Document signed by"
 
 ![A signed agreement's timeline: the eSign card naming the signer, with the PDF's SHA-256 hash, the signer's email verified via the recipient link, IP address, web form, signed fields, the consent they gave and their browser](screenshots/audit-trail-light.webp)
 
-| On the card            | Where it comes from                                                                                                                                                   |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Signer's name          | What they typed into the **Signer Name Field**. Without that setting, a signed-in user signing as themselves is named after their own User; anyone else is not named. |
-| **Document Integrity** | The SHA-256 hash of the signed PDF.                                                                                                                                   |
-| **Email**              | See [Which email is recorded](#which-email-is-recorded).                                                                                                              |
-| Verification           | "Email verified via recipient link", or "Link sent to …, verified via recipient link" when the signer entered another address than the one the link was bound to.     |
-| **IP**                 | The signer's IP address, from the `CF-Connecting-IP`, `X-Real-IP` or `X-Forwarded-For` header, or else the connection.                                                |
-| **Form**               | The web form's title.                                                                                                                                                 |
-| **Signed Fields**      | The Signature fields that hold a signature.                                                                                                                           |
-| **Consent**            | The consent text the signer ticked, and when the server received it.                                                                                                  |
-| **User Agent**         | The signer's browser.                                                                                                                                                 |
+| On the card            | Where it comes from                                                                                                                                                                             |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Signer's name          | What they typed into the **Signer Name Field**. Without that setting, a signed-in user signing as themselves is named after their own User; anyone else is not named.                           |
+| **Document Integrity** | The SHA-256 hash of the signed PDF.                                                                                                                                                             |
+| **Email**              | See [Which email is recorded](#which-email-is-recorded).                                                                                                                                        |
+| Verification           | "Email verified via recipient link", or "Link sent to …, verified via recipient link" when the signer entered another address in the **Signer Email Field** than the one the link was bound to. |
+| **IP**                 | The signer's IP address, from the `CF-Connecting-IP`, `X-Real-IP` or `X-Forwarded-For` header, or else the connection.                                                                          |
+| **Form**               | The web form's title.                                                                                                                                                                           |
+| **Signed Fields**      | The Signature fields that hold a signature.                                                                                                                                                     |
+| **Consent**            | The consent text the signer ticked, and when the server received it.                                                                                                                            |
+| **User Agent**         | The signer's browser.                                                                                                                                                                           |
 
 The card is drawn from an eSign Communication on the document. Its content holds the same data as JSON, with the signing time, the print format and the PDF's file name too; its sender and sender name are the signer's email and name. The Communication has its own copy of the signed PDF.
 

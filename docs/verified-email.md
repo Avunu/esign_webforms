@@ -22,7 +22,7 @@ A link is bound when:
 
 ## What the signer sees
 
-With a valid bound link, the form says "Signing as …, verified by your email link" and the email field is filled in with the address. On a web form without **Require Verified Email**, the signer can still change it; if they do, the audit trail records what they entered and notes "Link sent to …, verified via recipient link" with the bound address.
+With a valid bound link, the form says "Signing as …, verified by your email link" and the email field is filled in with the address. On a web form without **Require Verified Email**, the signer can still change it. With a **Signer Email Field**, the audit trail then records what they entered and notes "Link sent to …, verified via recipient link" with the bound address. Without one, the audit trail records the bound address whatever they typed.
 
 ## Require Verified Email
 
