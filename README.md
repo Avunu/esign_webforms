@@ -15,6 +15,7 @@ Electronic signatures on Frappe documents through web forms, with signed PDFs
 [![Latest release](https://img.shields.io/github/v/release/Avunu/esign_webforms)](https://github.com/Avunu/esign_webforms/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](license.txt)
 [![Frappe v16](https://img.shields.io/badge/Frappe-v16-blue)](https://github.com/frappe/frappe/tree/version-16)
+[![Documentation](https://img.shields.io/badge/docs-docs.avunu.net-blue)](https://docs.avunu.net/esign-webforms/)
 
 <picture>
   <img src="docs/screenshots/signing-page-light.webp" alt="The signing page: the agreement in its print format, and the signer's name, email, typed signature and the ticked consent to sign electronically in the form beside it">
@@ -93,6 +94,7 @@ All limitations, and the messages the app shows with their fixes, are in [docs/t
 
 ## Support
 
+- Documentation: [docs.avunu.net/esign-webforms/](https://docs.avunu.net/esign-webforms/)
 - Bug reports and questions: [GitHub issues](https://github.com/Avunu/esign_webforms/issues)
 - E-mail: <mail@avu.nu>
 
