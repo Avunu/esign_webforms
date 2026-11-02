@@ -27,7 +27,7 @@
 	},
 	"devDependencies": {
 		"@types/hast": "^3.0.4",
-		"@types/node": "^26.6.4",
+		"@types/node": "^26.6.6",
 		"frappe-types": "^16.5.0",
 		"oxfmt": "^0.75.0",
 		"oxlint": "^1.90.0",
