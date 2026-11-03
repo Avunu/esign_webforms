@@ -47,7 +47,7 @@
 		"readme": "feature",
 		"width": 2880,
 		"height": 1800,
-		"sha256": "13c0b6d480f8dcec4ee51e41142c33299ba019f7bdb160e21dbde1dba4d517e6"
+		"sha256": "1fe1297e3209eebdfcec4d013359a2cd7ca835ab2f5a2058304b462864a81e85"
 	},
 	{
 		"name": "signer-settings",
@@ -57,7 +57,7 @@
 		"readme": "feature",
 		"width": 2880,
 		"height": 1800,
-		"sha256": "05376313cf29c36c41140e6d4b0c3c6f608560c4fe686f06685d4e7f96e76b33"
+		"sha256": "e922250f8cfe705b470aa4ad97ce6b2f44a7efd04b3e77f45372c2ebc2bd91bd"
 	},
 	{
 		"name": "signer-settings",
@@ -67,7 +67,7 @@
 		"readme": "feature",
 		"width": 2880,
 		"height": 1800,
-		"sha256": "546f0a7ad679e901565ba94365e28abde6417ed73b406040bb470b8dd840d409"
+		"sha256": "c522c666f4db3357b598417c8863622c1f4c5780cd3a6acbe9e56a0e8141f4a1"
 	},
 	{
 		"name": "signing-page",
@@ -77,6 +77,6 @@
 		"readme": "hero",
 		"width": 2880,
 		"height": 1800,
-		"sha256": "431e5385a6739113b42bd21f85c7f5b338aed5e2deb7f794927d05d759c70903"
+		"sha256": "fcf7bd2b2a65ebe2db3d2f1f6411017958c644836addfcb58297e82f03bda5d0"
 	}
 ]
