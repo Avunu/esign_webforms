@@ -8,6 +8,18 @@ app_description = "Electronic signatures on Frappe documents through web forms, 
 app_email = "mail@avu.nu"
 app_license = "MIT"
 
+# Frappe's About dialog takes the logo from here. not_listed keeps the app off the apps screen.
+# app_logo_url would change the site's own logo.
+add_to_apps_screen = [
+	{
+		"name": "esign_webforms",
+		"logo": "/assets/esign_webforms/images/esign_webforms-logo.svg",
+		"title": "eSign Web Forms",
+		"route": "/desk",
+		"has_permission": "esign_webforms.apps_screen.not_listed",
+	}
+]
+
 # The esbuild entries are .js files that import the TypeScript modules: `bench build` keys
 # assets.json by the entry's name and `bench build --using-cached` by the built file's, and only a
 # .js entry gets the same key from both.
