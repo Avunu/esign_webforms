@@ -1,5 +1,12 @@
 # Changelog
 
+## [16.1.0](https://github.com/Avunu/esign_webforms/compare/v16.0.0...v16.1.0) (2026-11-07)
+
+
+### Features
+
+* show the app's logo in the About dialog, on frappe-nix 2.4.0 ([#74](https://github.com/Avunu/esign_webforms/issues/74)) ([9b690d2](https://github.com/Avunu/esign_webforms/commit/9b690d2a45e310aafe5241472f24f28aa72f0fb6))
+
 ## [16.0.0](https://github.com/Avunu/esign_webforms/compare/v0.0.1...v16.0.0) (2026-10-30)
 
 
