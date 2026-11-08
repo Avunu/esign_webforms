@@ -319,10 +319,8 @@ export class ControlFontSelect extends ControlData {
 				const value = optionButton.dataset.value;
 				this.set_input(value);
 				this.popover_element.hidePopover();
-				const onchange = this.df.onchange;
-				if (typeof onchange === "function") {
-					onchange.call(this.df);
-				}
+				// frappe calls a field's onchange with the control as `this` (base_control.js).
+				this.df.onchange?.call(this);
 			}
 		});
 
