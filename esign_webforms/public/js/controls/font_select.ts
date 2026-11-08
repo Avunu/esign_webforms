@@ -1,7 +1,6 @@
 // Copyright (c) 2026, Avunu LLC and contributors
 // For license information, please see license.txt
 
-import { ControlData } from "./base";
 import { toDom, type HastElement } from "./utils";
 
 /**
@@ -115,7 +114,7 @@ export async function filterAvailableFonts(fonts: FontOptionInput[]): Promise<Fo
 	}
 }
 
-export class ControlFontSelect extends ControlData {
+export class ControlFontSelect extends frappe.ui.form.ControlData {
 	// Assigned in make_input and _build_ui, which frappe's control constructor reaches:
 	// `declare` keeps the class from re-initialising them afterwards.
 	declare _options: FontOptionInput[];
