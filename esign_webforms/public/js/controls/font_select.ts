@@ -316,10 +316,10 @@ export class ControlFontSelect extends frappe.ui.form.ControlData {
 				e.target instanceof Element ? e.target.closest<HTMLElement>(".font-select-option") : null;
 			if (optionButton) {
 				const value = optionButton.dataset.value;
-				this.set_input(value);
 				this.popover_element.hidePopover();
-				// frappe calls a field's onchange with the control as `this` (base_control.js).
-				this.df.onchange?.call(this);
+				// Like the upload and signature controls: set_value writes the model,
+				// updates the input and runs df.change / df.onchange (base_control.js).
+				void this.set_value(value);
 			}
 		});
 
