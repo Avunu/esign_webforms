@@ -1,7 +1,7 @@
 // Copyright (c) 2026, Avunu LLC and contributors
 // For license information, please see license.txt
 
-import type { Dialog, Form, FrappeResponse } from "frappe-types";
+import type { Dialog, Form, FormDocumentEvents } from "frappe-types";
 
 // oxlint-disable-next-line import/no-unassigned-import -- registers the timeline card's microtemplate
 import "./templates/esign_timeline.html";
@@ -45,13 +45,13 @@ interface EsignFormEvents {
 	) => Promise<string[] | null | undefined> | string[] | null | undefined;
 }
 
-$(document).on("form-refresh", function (_event: JQuery.TriggeredEvent, frm: Form) {
+$(document).on("form-refresh", function (_event, ...[frm]: FormDocumentEvents["form-refresh"]) {
 	frappe
 		.call<boolean>("esign_webforms.esign.can_esign", {
 			doctype: frm.doctype,
 			doc: frm.doc,
 		})
-		.then((r: FrappeResponse<boolean>) => {
+		.then((r) => {
 			if (r.message) {
 				const esign_dialog = new ESignDialog(frm);
 				frm.add_custom_button(__("Send for eSign"), () => {
