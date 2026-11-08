@@ -4,7 +4,7 @@
 // The names esign_webforms adds to frappe's namespaces and to the page, for the desk scripts and the
 // compiled bundles. A module (it imports), so the `frappe-types` block merges into the package.
 
-import type { BaseControl } from "frappe-types";
+import type { ControlData, FrappeCheck } from "frappe-types";
 
 /** What the eSign page template (esign_webforms/templates/esign_webforms.html) passes to the page script. */
 interface EsignContext {
@@ -19,9 +19,14 @@ interface EsignContext {
 declare module "frappe-types" {
 	interface FrappeUiFormNamespace {
 		// app-owned: the image upload control, registered by esign_webforms's control bundles
-		ControlUpload: typeof BaseControl;
+		ControlUpload: typeof ControlData;
 		// app-owned: the font picker control, registered by esign_webforms's control bundles
-		ControlFontSelect: typeof BaseControl;
+		ControlFontSelect: typeof ControlData;
+	}
+
+	interface WebFormDocFields {
+		// app-owned: the Web Form's "eSign Enabled" Custom Field, which prepare() copies onto the controller
+		esign_enabled?: FrappeCheck;
 	}
 
 	interface Frappe {
@@ -43,8 +48,6 @@ declare global {
 		loadPrintHtml?: () => Promise<void>;
 		// app-owned: reloads the eSign page's document preview after signing
 		refreshPrintHtml?: () => Promise<void>;
-		// frappe's web form save guard (frappe/public/js/frappe/web_form/web_form.js)
-		saving?: boolean;
 		// The Local Font Access API (Chromium only), not in TypeScript's DOM library
 		queryLocalFonts?: () => Promise<LocalFontData[]>;
 	}
