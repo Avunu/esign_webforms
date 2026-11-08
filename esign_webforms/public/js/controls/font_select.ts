@@ -1,7 +1,6 @@
 // Copyright (c) 2026, Avunu LLC and contributors
 // For license information, please see license.txt
 
-import { ControlData } from "./base";
 import { toDom, type HastElement } from "./utils";
 
 /**
@@ -115,7 +114,7 @@ export async function filterAvailableFonts(fonts: FontOptionInput[]): Promise<Fo
 	}
 }
 
-export class ControlFontSelect extends ControlData {
+export class ControlFontSelect extends frappe.ui.form.ControlData {
 	// Assigned in make_input and _build_ui, which frappe's control constructor reaches:
 	// `declare` keeps the class from re-initialising them afterwards.
 	declare _options: FontOptionInput[];
@@ -317,12 +316,10 @@ export class ControlFontSelect extends ControlData {
 				e.target instanceof Element ? e.target.closest<HTMLElement>(".font-select-option") : null;
 			if (optionButton) {
 				const value = optionButton.dataset.value;
-				this.set_input(value);
 				this.popover_element.hidePopover();
-				const onchange = this.df.onchange;
-				if (typeof onchange === "function") {
-					onchange.call(this.df);
-				}
+				// Like the upload and signature controls: set_value writes the model,
+				// updates the input and runs df.change / df.onchange (base_control.js).
+				void this.set_value(value);
 			}
 		});
 

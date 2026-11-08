@@ -11,7 +11,6 @@
  * @author Avunu LLC
  */
 
-import { ControlData } from "./base";
 import { toDom, type HastElement } from "./utils";
 
 /** `df.options` of an Upload field, when it restricts the file types. */
@@ -19,7 +18,7 @@ interface UploadOptions {
 	allowed_file_types?: string[];
 }
 
-export class ControlUpload extends ControlData {
+export class ControlUpload extends frappe.ui.form.ControlData {
 	declare file_input: HTMLInputElement;
 	declare preview_element: HTMLElement;
 	declare preview_img: HTMLImageElement;

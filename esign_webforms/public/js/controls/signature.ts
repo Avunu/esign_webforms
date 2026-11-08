@@ -2,7 +2,6 @@
 // For license information, please see license.txt
 
 import SignaturePad from "signature_pad";
-import { ControlData } from "./base";
 import { createIconHast, toDom, type HastElement } from "./utils";
 
 /**
@@ -72,7 +71,7 @@ let signatureCounter = 0;
  * @description A signature field control with draw, type, and upload modes.
  * Uses modern web APIs (Popover, CSS Anchor Positioning) and HAST for DOM.
  */
-export class ControlSignature extends ControlData {
+export class ControlSignature extends frappe.ui.form.ControlData {
 	// Assigned in make_input (by toDom refs for the elements), which frappe's control
 	// constructor calls: `declare` keeps the class from re-initialising them afterwards.
 	declare _id: number;

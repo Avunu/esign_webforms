@@ -8,9 +8,9 @@
  * It extends WebForm to use our custom accept endpoint and registers
  * our custom controls for the web/public frontend.
  */
-import type { FrappeDocBase, FrappeResponse } from "frappe-types";
+import type { FrappeDocBase } from "frappe-types";
 // Also brings in the website globals frappe adds on a web form page (frappe.ready, …).
-import type { WebFormDoc } from "frappe-types/web";
+import type { WebFormDoc, WebFormSaveResult } from "frappe-types/web";
 import WebFormList from "frappe/public/js/frappe/web_form/web_form_list";
 import WebForm from "frappe/public/js/frappe/web_form/web_form";
 import { ControlSignature } from "../controls/signature";
@@ -112,7 +112,7 @@ function loadPrintHtml(): Promise<void> {
 			freeze: false,
 		}),
 	)
-		.then((response: FrappeResponse<PrintHtmlResponse>) => {
+		.then((response) => {
 			if (response.message) {
 				renderPrintHtml(response.message.print_html, response.message.print_style);
 			}
@@ -207,7 +207,7 @@ frappe.ui.form.ControlUpload = ControlUpload;
 frappe.ui.form.ControlSignature = ControlSignature;
 
 class EsignWebForm extends WebForm {
-	override handle_success(data: unknown): void {
+	override handle_success(data: WebFormSaveResult): void {
 		// Override to use eSign success card in sidebar
 		const formCard = document.querySelector(".esign-form-card");
 		const successCard = document.getElementById("esign-success-card");
@@ -438,11 +438,10 @@ frappe.ready(function () {
 			}
 			if (["Attach", "Attach Image"].includes(df.fieldtype)) {
 				// The Attach controls read an object here; frappe's own web form script does the same.
-				const options: unknown = df.options;
-				const attach_options =
-					typeof options === "object" && options !== null ? (options as Record<string, unknown>) : {};
-				attach_options.disable_file_browser = true;
-				Reflect.set(df, "options", attach_options);
+				const options =
+					df.options && typeof df.options === "object" && !Array.isArray(df.options) ? df.options : {};
+				options.disable_file_browser = true;
+				df.options = options;
 			}
 		});
 	}
