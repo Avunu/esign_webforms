@@ -28,9 +28,9 @@
 	"devDependencies": {
 		"@types/hast": "^3.0.4",
 		"@types/node": "^26.6.6",
-		"frappe-types": "^16.6.0",
-		"oxfmt": "^0.77.0",
-		"oxlint": "^1.92.0",
+		"frappe-types": "^16.7.1",
+		"oxfmt": "^0.78.0",
+		"oxlint": "^1.93.0",
 		"stylelint": "^17.16.0",
 		"stylelint-config-standard-scss": "^17.0.0",
 		"typescript": "^7.0.2",
