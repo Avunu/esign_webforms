@@ -5,7 +5,6 @@
       "fieldname": "esign_enabled",
       "fieldtype": "Check",
       "insert_after": "login_required",
-      "is_system_generated": 0,
       "label": "Enable eSign",
       "module": "eSign",
       "name": "Web Form-esign_enabled"
@@ -16,7 +15,6 @@
       "fieldname": "esign_section_break",
       "fieldtype": "Section Break",
       "insert_after": "allow_delete",
-      "is_system_generated": 0,
       "label": "eSign Settings",
       "module": "eSign",
       "name": "Web Form-esign_section_break"
@@ -26,7 +24,6 @@
       "fieldname": "esign_submit_on_response",
       "fieldtype": "Check",
       "insert_after": "esign_section_break",
-      "is_system_generated": 0,
       "label": "Submit on Response",
       "module": "eSign",
       "name": "Web Form-esign_submit_on_response"
@@ -37,7 +34,6 @@
       "fieldname": "esign_force_mobile",
       "fieldtype": "Check",
       "insert_after": "esign_submit_on_response",
-      "is_system_generated": 0,
       "label": "Only allow Signing on Mobile",
       "module": "eSign",
       "name": "Web Form-esign_force_mobile"
@@ -47,7 +43,6 @@
       "fieldname": "esign_column_break",
       "fieldtype": "Column Break",
       "insert_after": "esign_force_mobile",
-      "is_system_generated": 0,
       "module": "eSign",
       "name": "Web Form-esign_column_break"
     },
@@ -56,7 +51,6 @@
       "fieldname": "esign_update_field",
       "fieldtype": "Select",
       "insert_after": "esign_column_break",
-      "is_system_generated": 0,
       "label": "Set Property After Response",
       "module": "eSign",
       "name": "Web Form-esign_update_field"
@@ -66,7 +60,6 @@
       "fieldname": "esign_update_value",
       "fieldtype": "Data",
       "insert_after": "esign_update_field",
-      "is_system_generated": 0,
       "label": "Value To Be Set",
       "module": "eSign",
       "name": "Web Form-esign_update_value"
@@ -77,7 +70,6 @@
       "fieldname": "esign_signer_section",
       "fieldtype": "Section Break",
       "insert_after": "esign_update_value",
-      "is_system_generated": 0,
       "label": "Signer",
       "module": "eSign",
       "name": "Web Form-esign_signer_section"
@@ -88,7 +80,6 @@
       "fieldname": "esign_signer_name_field",
       "fieldtype": "Select",
       "insert_after": "esign_signer_section",
-      "is_system_generated": 0,
       "label": "Signer Name Field",
       "module": "eSign",
       "name": "Web Form-esign_signer_name_field"
@@ -100,7 +91,6 @@
       "fieldname": "esign_require_verified_email",
       "fieldtype": "Check",
       "insert_after": "esign_signer_name_field",
-      "is_system_generated": 0,
       "label": "Require Verified Email",
       "module": "eSign",
       "name": "Web Form-esign_require_verified_email"
@@ -110,7 +100,6 @@
       "fieldname": "esign_signer_column_break",
       "fieldtype": "Column Break",
       "insert_after": "esign_require_verified_email",
-      "is_system_generated": 0,
       "module": "eSign",
       "name": "Web Form-esign_signer_column_break"
     },
@@ -120,7 +109,6 @@
       "fieldname": "esign_signer_email_field",
       "fieldtype": "Select",
       "insert_after": "esign_signer_column_break",
-      "is_system_generated": 0,
       "label": "Signer Email Field",
       "module": "eSign",
       "name": "Web Form-esign_signer_email_field"
@@ -131,7 +119,6 @@
       "fieldname": "esign_consent_text",
       "fieldtype": "Small Text",
       "insert_after": "esign_signer_email_field",
-      "is_system_generated": 0,
       "label": "Consent Text",
       "module": "eSign",
       "name": "Web Form-esign_consent_text"
@@ -142,7 +129,6 @@
       "fieldname": "esign_notification_section",
       "fieldtype": "Section Break",
       "insert_after": "esign_consent_text",
-      "is_system_generated": 0,
       "label": "Notification Settings",
       "module": "eSign",
       "name": "Web Form-esign_notification_section"
@@ -153,7 +139,6 @@
       "fieldname": "esign_send_notification",
       "fieldtype": "Check",
       "insert_after": "esign_notification_section",
-      "is_system_generated": 0,
       "label": "Send Notification on Response",
       "module": "eSign",
       "name": "Web Form-esign_send_notification"
@@ -165,7 +150,6 @@
       "fieldname": "esign_notification",
       "fieldtype": "Link",
       "insert_after": "esign_send_notification",
-      "is_system_generated": 0,
       "label": "Notification",
       "module": "eSign",
       "name": "Web Form-esign_notification",
@@ -178,7 +162,6 @@
       "doc_type": "Web Form",
       "doctype_or_field": "DocField",
       "field_name": "print_format",
-      "is_system_generated": 0,
       "module": "eSign",
       "name": "Web Form-print_format-depends_on",
       "property": "depends_on",
