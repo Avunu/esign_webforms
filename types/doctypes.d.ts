@@ -177,6 +177,8 @@ declare global {
 			label?: string | null;
 			/** Allow Read On All Link Options · Check */
 			allow_read_on_all_link_options?: 0 | 1;
+			/** Apply User Permissions · Check */
+			apply_user_permissions?: 0 | 1;
 			/** Mandatory · Check */
 			reqd?: 0 | 1;
 			/** Display Depends On · Code */
