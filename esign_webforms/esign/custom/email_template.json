@@ -5,7 +5,6 @@
       "fieldname": "esign_column_break",
       "fieldtype": "Column Break",
       "insert_after": "subject",
-      "is_system_generated": 0,
       "module": "eSign",
       "name": "Email Template-esign_column_break"
     },
@@ -14,7 +13,6 @@
       "fieldname": "esign_request",
       "fieldtype": "Check",
       "insert_after": "esign_column_break",
-      "is_system_generated": 0,
       "label": "eSign Request",
       "module": "eSign",
       "name": "Email Template-esign_request"
@@ -24,7 +22,6 @@
       "fieldname": "message_section_break",
       "fieldtype": "Section Break",
       "insert_after": "esign_request",
-      "is_system_generated": 0,
       "label": "Message Template",
       "module": "eSign",
       "name": "Email Template-message_section_break"

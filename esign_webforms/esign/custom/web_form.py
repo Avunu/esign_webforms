@@ -1190,7 +1190,7 @@ def get_print_html(
 	)
 
 	# Clean up any local message log
-	frappe.local.message_log = None
+	frappe.local.message_log = []
 
 	return PrintHtmlResponse(
 		print_html=print_html,
@@ -1717,6 +1717,6 @@ def accept(web_form: str, data: str, esign_consent: str | int | None = None):
 	_enqueue_print_attachment(doc, wf, bound_email, consent_text, consent_timestamp)
 
 	# Clean up any local message log
-	frappe.local.message_log = None
+	frappe.local.message_log = []
 
 	return doc
