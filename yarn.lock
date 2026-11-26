@@ -826,10 +826,10 @@ signal-exit@^4.0.1:
   resolved "https://registry.yarnpkg.com/signal-exit/-/signal-exit-4.1.0.tgz#952188c1cbd546070e2dd20d0f41c0ae0530cb04"
   integrity sha512-bzyZ1e88w9O1iNJbKnOlvYTrWPDl46O1bG0D3XInv+9tkPrxrN8jUUTiFlDkkmKWgn1M6CfIA13SuGqOa9Korw==
 
-signature_pad@^5.1.5:
-  version "5.1.5"
-  resolved "https://registry.yarnpkg.com/signature_pad/-/signature_pad-5.1.5.tgz#3974c70204503a5d5c065a3f255d86ba7f053e6f"
-  integrity sha512-0KuciUW0OJKnWJQ2N+6HvmgUWug1vrK7FihLrGYA5uyJ8yq/2XMLzYHlmoSo3ntG2oNwJzUQhHf/rQ/bCHV1dw==
+signature_pad@^5.1.6:
+  version "5.1.6"
+  resolved "https://registry.yarnpkg.com/signature_pad/-/signature_pad-5.1.6.tgz#a6382bcd4784f10da078845b9f5726e721839b07"
+  integrity sha512-LRIUy9/eLJ1hYnplIeTY7peoxOlpnS4YPK/6yRRSZwt1qq6kmwbfMXgkOCRjrOGdzP2gIrzdBIpnzRXpgyF/rg==
 
 source-map-js@^1.2.1:
   version "1.2.1"
